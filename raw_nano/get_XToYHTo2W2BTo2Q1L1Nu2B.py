@@ -1,4 +1,8 @@
+<<<<<<< Updated upstream
 rom TIMBER.Tools.Common import ExecuteCmd
+=======
+from TIMBER.Tools.Common import ExecuteCmd
+>>>>>>> Stashed changes
 import sys
 
 # dictionary containing the year as keys, with each value being another dictionary of {sampleName: DAS location}
