@@ -27,18 +27,17 @@ RVec<int> PickDijets(RVec<float> pt, RVec<float> eta, RVec<float> jet_phi, RVec<
             break;
         }
     }
-    return {Jet0Idx,Jet1Idx};
+    return {jet0Idx,jet1Idx};
 }
 
-RVec<int> PickLeptonPhi(RVec<float> jet_phi, RVec<float> lepton_phi, RVec<float> lepton_eta, RVec<float> lepton_mass, RVec<float> lepton_pt, RVec<float> lepton_isl) {	
+RVec<int> PickIsolatedLeptons(RVec<float> jet_phi, RVec<float> phi, RVec<float> pt, RVec<float> eta, RVec<float> dxy, Vec<float> dz, RVec<float> iso_rel) {
+// Pick "good" leptons for preselection based on pT, eta, dxyz, and isolation requirements
     int leptonIdx = -1;
-    // search for leptons with large delta phi relative to higgs candidate (choose highest pt)
-    for (int il=0; il<lepton_phi.size(); il++) {
-        if (std::abs(lepton_eta[il]) < 2.4 && lepton_mass[il] > ## && lepton_pt[il] > ## && lepton_isl[il] < ## && hardware::DeltaPhi(lepton_phi[il],jet_phi[0]) > M_PI/2) {
+    for (int il=0; il<phi.size(); il++) {
+        if (pt[il] > 10 && std::abs(eta[il]) < 2.4 && dxy[il] < 0.045 && dz[il] < 0.2 && iso_rel < 0.3 && hardware::DeltaPhi(phi[il],jet_phi[0]) > M_PI/2) {
             leptonIdx = il;
             break;
         }
     }
     return {leptonIdx};
 }
-

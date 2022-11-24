@@ -123,12 +123,16 @@ class XHYbbWW:
         self.NFLAGS = self.getNweighted()
         self.AddCutflowColumn(self.NFLAGS, "NFLAGS")
 
-        #FatJet number/eta/mass/pt cuts
+        #FatJet number/pt/eta/mass cuts
 
         self.a.Cut('nFatJet','nFatJet > 1')
         self.NJETS=self.getNweighted()
         self.AddCutflowColumn(self.NJETS,"NJETS")
  
+        self.a.Cut('Jet_pt','FatJet_pt[0] > 400 && FatJet_pt[1] > 200')
+        self.JETPT=self.getNweighted()
+        self.AddCutflowColumn(self.JETPT,"JETPT")
+
         self.a.Cut('Jet_eta', 'abs(FatJet_eta[0]) < 2.4 && abs(FatJet_eta[1]) < 2.4')
         self.JETETA=self.getNweighted()
         self.AddCutflowColumn(self.JETETA,"JETETA")
@@ -136,38 +140,41 @@ class XHYbbWW:
         self.a.Cut('Jet_mass', 'FatJet_msoftdrop[0] > 50 && FatJet_msoftdrop[1] > 40')
         self.JETMASS=self.getNweighted()
         self.AddCutflowColumn(self.JETMASS,"JETMASS")
- 
-        self.a.Cut('Jet_pt','FatJet_pt[0] > 400 && FatJet_pt[1] > 200')
-        self.JETPT=self.getNweighted()
-        self.AddCutflowColumn(self.JETPT,"JETPT")
 
-        #Lepton number/eta/mass/pt cuts
+
+        #Lepton number/pt/eta cuts
 
         self.a.Cut('nLepton','nElectron > 0 || nMuon > 0')
         self.NLEPTON=self.getNweighted()
         self.AddCutflowColumn(self.NLEPTON,"NLEPTON")
 
-        self.a.Cut('Lepton_eta', 'abs(Electron_eta[0]) < 2.4 || abs(Muon_eta[0]) < 2.4')
-        self.LEPETA=self.getNweighted()
-        self.AddCutflowColumn(self.LEPETA,'LEPETA')
-
-        self.a.Cut('Lepton_mass','Electron_mass[0] > ## || Muon_mass[0] > ##')
-        self.LEPMASS=self.getNweighted()
-        self.AddCutflowColumn(self.LEPMASS,'LEPMASS')
-
-        self.a.Cut('Lepton_pt','Electron_pt[0] > ## || Muon_pt[0] > ##')
+        self.a.Cut('Lepton_pt','Electron_pt[0] > 10 || Muon_pt[0] > 10')
         self.LEPPT=self.getNweighted()
         self.AddCutflowColumn(self.LEPPT,'LEPPT')
 
-    def LeptonISL(self,param = 'miniPFRelIso_all',cut):
+        self.a.Cut('Lepton_eta', 'abs(Electron_eta[0]) < 2.4 || abs(Muon_eta[0]) < 2.5')
+        self.LEPETA=self.getNweighted()
+        self.AddCutflowColumn(self.LEPETA,'LEPETA')
+'''
+        self.a.Cut('Lepton_mass','Electron_mass[0] > ## || Muon_mass[0] > ##') # No need to do mass cuts on leptons, right?
+        self.LEPMASS=self.getNweighted()
+        self.AddCutflowColumn(self.LEPMASS,'LEPMASS')
+'''
+
+
+'''
+    def LeptonISL(self,param = 'miniPFRelIso_all'):
+        Cuts=[0.3,0.1] #[miniPFRelIso_all,FatJet_lsf3] note: find a value that makes sense for FatJet_lsf3
         if param == 'miniPFRelIso_all':
-            self.a.Cut('LepISL','Electron_{0}[0] < {1} || Muon_{0}[0] < {1}'.format(param,cut))
+            self.a.Cut('LepISL','Electron_{0}[0] < {1} || Muon_{0}[0] < {1}'.format(param,Cuts[0]))
         else: # using FatJet_lsf3
-            self.a.Cut('LepISL','FatJet_lsf3[0] < {0}'.format(cut))
+            self.a.Cut('LepISL','FatJet_lsf3[0] < {0}'.format(cuts[1]))
         self.LEPISL=self.getNweighted()
         self.AddCutflowColumn(self.LEPISL,'LEPISL')
+# I doubt it make sense to impose an isolation requirement on the highest pT lepton. Consolidate everything into one C++ function to pick good leptons
+'''
 
-    def PhiCuts(self):
+    def Dijets(self):
         self.a.Define('DijetIdxs','PickDijets(FatJet_pt,FatJet_eta,FatJet_phi,FatJet_msoftdrop)')
         self.a.Cut('DijetsExist','DijetIdxs[0] > -1 && DijetIdxs[1] > -1')
         self.NDIJETS = self.getNweighted()
@@ -175,13 +182,14 @@ class XHYbbWW:
 
         self.a.SubCollection('Dijet','FatJet','DijetIdxs',useTake=True)
 
-        self.a.Define('ElectronIdx','PickLeptonPhi(Dijet_phi,Electron_phi,Electron_eta,Electron_mass,Electron_pt,Electron_miniPFRelIso_all)')
-        self.a.Define('MuonIdx','PickLeptonPhi(Dijet_phi,Muon_phi,Muon_eta,Muon_mass,Muon_pt,Muon_miniPFRelIso_all)')
+    def GoodLeptons(self):
+        self.a.Define('ElectronIdx', 'PickIsolatedLeptons(FatJet_phi,Electron_phi,Electron_pt,Electron_eta,Electron_dxy,Electron_dz,Electron_miniPFRelIso_all)')
+        self.a.Define('MuonIdx', 'PickIsolatedLeptons(FatJet_phi,Muon_phi,Muon_pt,Muon_eta,Muon_dxy,Muon_dz,Muon_miniPFRelIso_all)')
 
-        self.a.Cut('LeptonExists','ElectronIdx[0] > -1 || MuonIdx[0] > -1')
-        self.LEPPHI = self.getNweighted()
-        self.AddCutflowColumn(self.LEPPHI, "LEPPHI")
+        self.a.Cut('LeptonExists','ElectronIdx[0] != -1 || MuonIdx[0] != -1')
+        self.GOODLEP = self.getNweighted()
+        self.AddCutflowColumn(self.GOODLEP, "GOODLEP")
 
-        self.a.Define('Lepton_type','(MuonIdx[0] == -1 ? 0 : ElectronIdx[0] == -1 ? 1 : Electron_pt[ElectronIdx[0]] > Muon_pt[MuonIdx[0]] ? 0 : 1)') # From now on, 0 = Electron and 1 = Muon
+        self.a.Define('Lepton_type','MuonIdx[0] == -1 ? 0 : ElectronIdx[0] == -1 ? 1 : Electron_pt[ElectronIdx[0]] > Muon_pt[MuonIdx[0]] ? 0 : 1)') # From now on, 0 = Electron and 1 = Muon
         self.a.SubCollection('LeptonISL','Lepton_type == 0? Electron : Muon','Lepton_type == 0? ElectronIdx : MuonIdx',useTake=True) #No clue if this works 
    
