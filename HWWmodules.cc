@@ -30,7 +30,9 @@ RVec<int> PickDijets(RVec<float> pt, RVec<float> eta, RVec<float> jet_phi, RVec<
     return {jet0Idx,jet1Idx};
 }
 
-RVec<int> PickIsolatedLeptons(RVec<float> jet_phi, RVec<float> phi, RVec<float> pt, RVec<float> eta, RVec<float> dxy, Vec<float> dz, RVec<float> iso_rel) {
+/*
+
+RVec<int> PickIsolatedLeptons(RVec<float> jet_phi, RVec<float> phi, RVec<float> pt, RVec<float> eta, RVec<float> dxy, RVec<float> dz, RVec<float> iso_rel) {
 // Pick "good" leptons for preselection based on pT, eta, dxyz, and isolation requirements
     int leptonIdx = -1;
     for (int il=0; il<phi.size(); il++) {
@@ -41,3 +43,5 @@ RVec<int> PickIsolatedLeptons(RVec<float> jet_phi, RVec<float> phi, RVec<float> 
     }
     return {leptonIdx};
 }
+
+*/
