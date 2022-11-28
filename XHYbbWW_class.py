@@ -37,55 +37,38 @@ def SplitUp(filename,npieces,nFiles=False):
 
 class XHYbbWW:
     def __init__(self, inputfile, ijob, njobs):
-        if inputfile.endswith('.txt'):
-            infiles = SplitUp(inputfile, njobs)[ijob-1]
-        else:
-            infiles = inputfile
-
-        if inputfile.endswith('.txt'):
-	    # we're looking at signal
-            if 'XYH' in inputfile:
-		# format: (raw_nano/XHY-<XMASS>-<YMASS>_year.txt
-                prefix = inputfile.split('/')[-1].split('-')   # [XHY, <XMASS>, <YMASS>_year.txt]
-                self.year = prefix[2].split('_')[1].split('.')[0]
-                self.setname = ('MX_' + prefix[1] + '_MY_' + prefix[2].split('_')[0])  # MX_XMASS_MY_YMASS
-	        # create an analyzer module with the proper multiSampleStr argument
-                self.a = analyzer(infiles,multiSampleStr=self.setname[3])
-		# ensure we're working with the proper YMass
-                self.a.Cut('CorrectMass', 'GenModel_YMass_{} == 1'.format(self.setname[3]))
-            else:
-		# Looking at data, format: (raw_nano/setname_era.txt)
-                self.setname = inputfile.split('/')[-1].split('_')[0]
-                self.year= inputfile.split('/')[-1].split('_')[1].split('.')[0]
-                self.a = analyzer(infiles)
-        else:	# not likely to encounter this for this analysis
-            self.setname = inputfile.split('/')[-1].split('_')[1]
-            self.a = analyzer(infiles)
-        
-#       self.year = str(year)
+        # format: (raw_nano/data_type/setname_year.txt
+        infiles = SplitUp(inputfile, njobs)[ijob-1]
+        self.setname=inputfile.split('/')[-1].split('_')[0]
+        self.year=inputfile.split('/')[-1].split('_')[-1].split('.')[0]
         self.ijob = ijob
         self.njobs = njobs
-        
-	# get config from JSON
-        self.config = OpenJSON('XHYbbWWconfig.json')
+
+        self.a = analyzer(infiles)
+
+        if 'Data' in inputfile:
+          # self.a = analyzer(infiles)
+            self.a.isData = True
+        else:
+          # MY=self.setname.split('-')[2]
+          # self.a = analyzer(infiles,multiSampleStr=MY)
+          # self.a.Cut('CorrectMass', 'GenModel_YMass_{} == 1'.format(MY)) 
+            self.a.isData = False
+ 
+        self.ijob = ijob
+        self.njobs = njobs
+     
+	# Cuts from config file
+        self.config = OpenJSON('XHYbbWW_config.json')
         self.cuts = self.config['CUTS']
 
-	# triggers for various years
+	# triggers
         self.trigs = {
-            #'16':['HLT_PFHT800','HLT_PFHT900'],
-            #'17':['HLT_PFHT1050','HLT_AK8PFJet500'],
-            #'18':['HLT_AK8PFJet400_TrimMass30','HLT_AK8PFHT850_TrimMass50','HLT_PFHT1050']
             16:['HLT_PFHT800','HLT_PFHT900'],
             17:["HLT_PFHT1050","HLT_AK8PFJet500","HLT_AK8PFHT750_TrimMass50","HLT_AK8PFHT800_TrimMass50","HLT_AK8PFJet400_TrimMass30"],
             18:['HLT_AK8PFJet400_TrimMass30','HLT_AK8PFHT850_TrimMass50','HLT_PFHT1050']
         }
 
-        # check if data or sim
-        if 'Data' in inputfile:
-            self.a.isData = True
-        else:
-            self.a.isData = False
-    
     def AddCutflowColumn(self, var, varName):
         '''
         for future reference:
@@ -100,7 +83,6 @@ class XHYbbWW:
         else:
             return self.a.DataFrame.Count().GetValue()
 
-    # CompileCPP('~/public/XHYbbWW_analysis/CMSSW_11_1_4/XHYbbWW_semileptonic') # compile C++ code
 
     def KinematicSnap(self):
         self.NPROC = self.getNweighted()
@@ -150,37 +132,88 @@ class XHYbbWW:
 
         self.a.Cut('Lepton_pt','Electron_pt[0] > 10 || Muon_pt[0] > 10')
         self.LEPPT=self.getNweighted()
-        self.AddCutflowColumn(self.LEPPT,'LEPPT')
+        self.AddCutflowColumn(self.LEPPT,"LEPPT")
 
         self.a.Cut('Lepton_eta', 'abs(Electron_eta[0]) < 2.4 || abs(Muon_eta[0]) < 2.5')
         self.LEPETA=self.getNweighted()
-        self.AddCutflowColumn(self.LEPETA,'LEPETA')
-'''
-        self.a.Cut('Lepton_mass','Electron_mass[0] > ## || Muon_mass[0] > ##') # No need to do mass cuts on leptons, right?
-        self.LEPMASS=self.getNweighted()
-        self.AddCutflowColumn(self.LEPMASS,'LEPMASS')
-'''
+        self.AddCutflowColumn(self.LEPETA,"LEPETA")
+
+        return self.a.GetActiveNode()
+
+    def ApplyStandardCorrections(self, snapshot=False): #NOTE: look more into pileup
+        if snapshot:
+            if self.a.isData:
+		# NOTE: LumiFilter requires the year as an integer 
+                lumiFilter = ModuleWorker('LumiFilter','TIMBER/Framework/include/LumiFilter.h',[int(self.year) if 'APV' not in self.year else 16])    # defaults to perform "eval" method 
+                self.a.Cut('lumiFilter',lumiFilter.GetCall(evalArgs={"lumi":"luminosityBlock"}))	       # replace lumi with luminosityBlock
+                if self.year == '18':
+                    HEM_worker = ModuleWorker('HEM_drop','TIMBER/Framework/include/HEM_drop.h',[self.setname if 'Muon' not in self.setname else self.setname[10:]])
+                    self.a.Cut('HEM','%s[0] > 0'%(HEM_worker.GetCall()))
+            else:
+                self.a = ApplyPU(self.a, 'XHYbbWWpileup.root', '20{}'.format(self.year), ULflag=True, histname='{}_{}'.format(self.setname,self.year))
+                if self.year == '16' or self.year == '17' or 'APV' in self.year:
+		    #self.a.AddCorrection(Correction("Prefire","TIMBER/Framework/include/Prefire_weight.h",[self.year],corrtype='weight'))
+                    L1PreFiringWeight = Correction("L1PreFiringWeight","TIMBER/Framework/TopPhi_modules/BranchCorrection.cc",constructor=[],mainFunc='evalWeight',corrtype='weight',columnList=['L1PreFiringWeight_Nom','L1PreFiringWeight_Up','L1PreFiringWeight_Dn'])
+                    self.a.AddCorrection(L1PreFiringWeight, evalArgs={'val':'L1PreFiringWeight_Nom','valUp':'L1PreFiringWeight_Up','valDown':'L1PreFiringWeight_Dn'})
+                elif self.year == '18':
+                    self.a.AddCorrection(Correction('HEM_drop','TIMBER/Framework/include/HEM_drop.h',[self.setname],corrtype='corr'))
+
+            self.a = AutoJME.AutoJME(self.a, 'FatJet', '20{}'.format(self.year), self.setname if 'Muon' not in self.setname else self.setname[10:])
+            self.a.MakeWeightCols(extraNominal='genWeight' if not self.a.isData else '')
+
+        else: #ignoring for now...
+            if not self.a.isData:
+                self.a.AddCorrection(Correction('Pileup',corrtype='weight'))
+                self.a.AddCorrection(Correction('Pdfweight',corrtype='uncert'))
+                if self.year == '16' or self.year == '17' or 'APV' in self.year:
+                    #self.a.AddCorrection(Correction('Prefire',corrtype='weight'))
+		# instantiate ModuleWorker to handle the C++ code via clang
+		    # NEED TO CHECK IF THIS WILL WORK ON SIGNAL MONTE CARLO
+                    self.a.AddCorrection(Correction('L1PreFiringWeight',corrtype='weight'))
+                elif self.year == '18':
+                    self.a.AddCorrection(Correction('HEM_drop',corrtype='corr'))
+                #if 'ttbar' in self.setname:
+                    #self.a.AddCorrection(Correction('TptReweight',corrtype='weight'))
+        return self.a.GetActiveNode()
 
 
-'''
-    def LeptonISL(self,param = 'miniPFRelIso_all'):
-        Cuts=[0.3,0.1] #[miniPFRelIso_all,FatJet_lsf3] note: find a value that makes sense for FatJet_lsf3
-        if param == 'miniPFRelIso_all':
-            self.a.Cut('LepISL','Electron_{0}[0] < {1} || Muon_{0}[0] < {1}'.format(param,Cuts[0]))
-        else: # using FatJet_lsf3
-            self.a.Cut('LepISL','FatJet_lsf3[0] < {0}'.format(cuts[1]))
-        self.LEPISL=self.getNweighted()
-        self.AddCutflowColumn(self.LEPISL,'LEPISL')
-# I doubt it make sense to impose an isolation requirement on the highest pT lepton. Consolidate everything into one C++ function to pick good leptons
-'''
-
-    def Dijets(self):
-        self.a.Define('DijetIdxs','PickDijets(FatJet_pt,FatJet_eta,FatJet_phi,FatJet_msoftdrop)')
-        self.a.Cut('DijetsExist','DijetIdxs[0] > -1 && DijetIdxs[1] > -1')
-        self.NDIJETS = self.getNweighted()
-        self.AddCutflowColumn(self.NDIJETS, "NDIJETS")
-
-        self.a.SubCollection('Dijet','FatJet','DijetIdxs',useTake=True)
+    def Snapshot(self, node=None):
+        startNode = self.a.GetActiveNode()
+        if node == None:
+            node = self.a.GetActiveNode()
+        
+        columns = [
+        'FatJet_J*',	# this will collect all the JME variations created during snapshotting and used in selection 
+        'FatJet_lsf3','FatJet_eta','FatJet_msoftdrop','FatJet_pt','FatJet_phi',
+        'FatJet_deepTagMD_HbbvsQCD', 'FatJet_deepTagMD_ZHbbvsQCD',
+        'FatJet_deepTagMD_WvsQCD', 'FatJet_deepTag_TvsQCD', 'FatJet_particleNet_HbbvsQCD',
+        'FatJet_particleNet_TvsQCD', 'FatJet_particleNetMD.*', 'FatJet_rawFactor', 'FatJet_tau*',
+        'FatJet_jetId', 'nFatJet', 'FatJet_JES_nom','FatJet_particleNetMD_Xqq',
+        'FatJet_particleNetMD_Xcc', 'FatJet_particleNet_QCD','FatJet_particleNet_WvsQCD',
+        'Electron_eta','Electron_pt','Electron_mass','Electron_phi','Electron_miniPFRelIso_all'
+        'Muon_eta','Muon_pt','Muon_mass','Muon_phi','Muon_miniPFRelIso_all','HLT_PFHT.*', 'HLT_PFJet.*', 'HLT_AK8.*', 'HLT_Mu50',
+        'event', 'eventWeight', 'luminosityBlock', 'run',
+        'NPROC', 'NJETS', 'NPT', 'NETA', 'NMSD']
+        
+        # append to columns list if not Data
+        if not self.a.isData:
+            columns.extend(['GenPart_.*', 'nGenPart', 'genWeight', 'GenModel*'])
+            columns.extend(['FatJet_JES_up','FatJet_JES_down',
+                            'FatJet_JER_nom','FatJet_JER_up','FatJet_JER_down',
+                            'FatJet_JMS_nom','FatJet_JMS_up','FatJet_JMS_down',
+                            'FatJet_JMR_nom','FatJet_JMR_up','FatJet_JMR_down'])
+            columns.extend(['Pileup__nom','Pileup__up','Pileup__down','Pdfweight__nom','Pdfweight__up','Pdfweight__down'])
+            if self.year == '16' or self.year == '17' or 'APV' in self.year:
+		#columns.extend(['Prefire__nom','Prefire__up','Prefire__down'])
+                columns.extend(['L1PreFiringWeight_Nom', 'L1PreFiringWeight_Up', 'L1PreFiringWeight_Dn'])	# these are the default columns in NanoAODv9
+                columns.extend(['L1PreFiringWeight__nom','L1PreFiringWeight__up','L1PreFiringWeight__down'])    # these are the weight columns created by the BranchCorrection module
+            elif self.year == '18':
+                columns.append('HEM_drop__nom')
+            
+        # get ready to send out snapshot
+        self.a.SetActiveNode(node)
+        self.a.Snapshot(columns, 'HWWsnapshot_{}_{}_{}of{}.root'.format(self.setname,self.year,self.ijob,self.njobs),'Events', openOption='RECREATE',saveRunChain=True)
+        self.a.SetActiveNode(startNode)
 
     def GoodLeptons(self):
         self.a.Define('ElectronIdx', 'PickIsolatedLeptons(FatJet_phi,Electron_phi,Electron_pt,Electron_eta,Electron_dxy,Electron_dz,Electron_miniPFRelIso_all)')
@@ -192,4 +225,15 @@ class XHYbbWW:
 
         self.a.Define('Lepton_type','MuonIdx[0] == -1 ? 0 : ElectronIdx[0] == -1 ? 1 : Electron_pt[ElectronIdx[0]] > Muon_pt[MuonIdx[0]] ? 0 : 1)') # From now on, 0 = Electron and 1 = Muon
         self.a.SubCollection('LeptonISL','Lepton_type == 0? Electron : Muon','Lepton_type == 0? ElectronIdx : MuonIdx',useTake=True) #No clue if this works 
-   
+
+        return self.a.GetActiveNode()
+
+    def Dijets(self):
+        self.a.Define('DijetIdxs','PickDijets(FatJet_pt,FatJet_eta,FatJet_phi,FatJet_msoftdrop)')
+        self.a.Cut('DijetsExist','DijetIdxs[0] > -1 && DijetIdxs[1] > -1')
+        self.NDIJETS = self.getNweighted()
+        self.AddCutflowColumn(self.NDIJETS, "NDIJETS")
+
+        self.a.SubCollection('Dijet','FatJet','DijetIdxs',useTake=True)
+
+        return self.a.GetActiveNode()
