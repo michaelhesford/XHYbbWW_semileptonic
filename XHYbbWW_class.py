@@ -105,6 +105,20 @@ class XHYbbWW:
         self.NFLAGS = self.getNweighted()
         self.AddCutflowColumn(self.NFLAGS, "NFLAGS")
 
+        #Lepton number/pt/eta cuts
+
+        self.a.Cut('nLepton','nElectron > 0 || nMuon > 0')
+        self.NLEPTON=self.getNweighted()
+        self.AddCutflowColumn(self.NLEPTON,"NLEPTON")
+
+        self.a.Cut('Lepton_pt','Electron_pt[0] > 10 || Muon_pt[0] > 10')
+        self.LEPPT=self.getNweighted()
+        self.AddCutflowColumn(self.LEPPT,"LEPPT")
+
+        self.a.Cut('Lepton_eta', 'abs(Electron_eta[0]) < 2.4 || abs(Muon_eta[0]) < 2.5')
+        self.LEPETA=self.getNweighted()
+        self.AddCutflowColumn(self.LEPETA,"LEPETA")
+
         #FatJet number/pt/eta/mass cuts
 
         self.a.Cut('nFatJet','nFatJet > 1')
@@ -122,21 +136,6 @@ class XHYbbWW:
         self.a.Cut('Jet_mass', 'FatJet_msoftdrop[0] > 50 && FatJet_msoftdrop[1] > 40')
         self.JETMASS=self.getNweighted()
         self.AddCutflowColumn(self.JETMASS,"JETMASS")
-
-
-        #Lepton number/pt/eta cuts
-
-        self.a.Cut('nLepton','nElectron > 0 || nMuon > 0')
-        self.NLEPTON=self.getNweighted()
-        self.AddCutflowColumn(self.NLEPTON,"NLEPTON")
-
-        self.a.Cut('Lepton_pt','Electron_pt[0] > 10 || Muon_pt[0] > 10')
-        self.LEPPT=self.getNweighted()
-        self.AddCutflowColumn(self.LEPPT,"LEPPT")
-
-        self.a.Cut('Lepton_eta', 'abs(Electron_eta[0]) < 2.4 || abs(Muon_eta[0]) < 2.5')
-        self.LEPETA=self.getNweighted()
-        self.AddCutflowColumn(self.LEPETA,"LEPETA")
 
         return self.a.GetActiveNode()
 
@@ -191,9 +190,10 @@ class XHYbbWW:
         'FatJet_jetId', 'nFatJet', 'FatJet_JES_nom','FatJet_particleNetMD_Xqq',
         'FatJet_particleNetMD_Xcc', 'FatJet_particleNet_QCD','FatJet_particleNet_WvsQCD',
         'Electron_eta','Electron_pt','Electron_mass','Electron_phi','Electron_miniPFRelIso_all'
-        'Muon_eta','Muon_pt','Muon_mass','Muon_phi','Muon_miniPFRelIso_all','HLT_PFHT.*', 'HLT_PFJet.*', 'HLT_AK8.*', 'HLT_Mu50',
-        'event', 'eventWeight', 'luminosityBlock', 'run',
-        'NPROC', 'NJETS', 'NPT', 'NETA', 'NMSD']
+        'Electron_dxy','Electron_dz','Electron_sip3d','Electron_hoe','Electron_eInvMinusPInv','Electron_deltaEtaSC','Electron_sieie',
+        'Muon_eta','Muon_pt','Muon_mass','Muon_phi','Muon_miniPFRelIso_all','Muon_dxy','Muon_dz, Muon_sip3d',
+        'Muon_mediumPromptId','Muon_segmentComp','Muon_isGlobal','HLT_PFHT.*', 'HLT_PFJet.*', 'HLT_AK8.*', 'HLT_Mu50',
+        'event', 'eventWeight', 'luminosityBlock', 'run','NPROC', 'NJETS', 'NPT', 'NETA', 'NMSD']
         
         # append to columns list if not Data
         if not self.a.isData:
@@ -215,25 +215,30 @@ class XHYbbWW:
         self.a.Snapshot(columns, 'HWWsnapshot_{}_{}_{}of{}.root'.format(self.setname,self.year,self.ijob,self.njobs),'Events', openOption='RECREATE',saveRunChain=True)
         self.a.SetActiveNode(startNode)
 
-    def GoodLeptons(self):
-        self.a.Define('ElectronIdx', 'PickIsolatedLeptons(FatJet_phi,Electron_phi,Electron_pt,Electron_eta,Electron_dxy,Electron_dz,Electron_miniPFRelIso_all)')
-        self.a.Define('MuonIdx', 'PickIsolatedLeptons(FatJet_phi,Muon_phi,Muon_pt,Muon_eta,Muon_dxy,Muon_dz,Muon_miniPFRelIso_all)')
+    def SignalLeptons(self):
+        self.a.Define('ElectronIdx', 'SignalElectrons(Electron_pt, Electron_eta, Electron_dxy, Electron_dz, Electron_sip3d, Electron_miniPFRelIso_all, Electron_hoe, Electron_eInvMinusPInv, Electron_deltaEtaSC, Electron_sieie)')
+        self.a.Define('MuonIdx', 'SignalMuons(Muon_pt, Muon_eta, Muon_dxy, Muon_dz, Muon_sip3d, Muon_miniPFRelIso_all, Muon_mediumPromptId, Muon_segmentComp, Muon_isGlobal)')
 
         self.a.Cut('LeptonExists','ElectronIdx[0] != -1 || MuonIdx[0] != -1')
         self.GOODLEP = self.getNweighted()
         self.AddCutflowColumn(self.GOODLEP, "GOODLEP")
 
-        self.a.Define('Lepton_type','MuonIdx[0] == -1 ? 0 : ElectronIdx[0] == -1 ? 1 : Electron_pt[ElectronIdx[0]] > Muon_pt[MuonIdx[0]] ? 0 : 1)') # From now on, 0 = Electron and 1 = Muon
-        self.a.SubCollection('LeptonISL','Lepton_type == 0? Electron : Muon','Lepton_type == 0? ElectronIdx : MuonIdx',useTake=True) #No clue if this works 
+        #self.a.Define('Lepton_type','MuonIdx[0] == -1 ? 0 : ElectronIdx[0] == -1 ? 1 : Electron_pt[ElectronIdx[0]] > Muon_pt[MuonIdx[0]] ? 0 : 1)') # From now on, 0 = Electron and 1 = Muon
+	#self.a.SubCollection('LeptonISL','Lepton_type == 0? Electron : Muon','Lepton_type == 0? ElectronIdx : MuonIdx',useTake=True) #No clue if this works
+        
+        self.a.Define('LeptonIdx','LeptonIdx(ElectronIdx,MuonIdx,Electron_pt,Muon_pt)') #output: {electronIdx, muonIdx} - index of lower pt lepton set to -1   
+        self.a.SubCollection('LeptonISL','LeptonIdx[0] == -1? Muon : Electron','LeptonIdx[0] == -1? LeptonIdx[1] : LeptonIdx[0]',useTake=True) # would be cool if I could do something like this, but not necessary
+
 
         return self.a.GetActiveNode()
+ 
 
     def Dijets(self):
         self.a.Define('DijetIdxs','PickDijets(FatJet_pt,FatJet_eta,FatJet_phi,FatJet_msoftdrop)')
         self.a.Cut('DijetsExist','DijetIdxs[0] > -1 && DijetIdxs[1] > -1')
         self.NDIJETS = self.getNweighted()
         self.AddCutflowColumn(self.NDIJETS, "NDIJETS")
-
+        
         self.a.SubCollection('Dijet','FatJet','DijetIdxs',useTake=True)
 
         return self.a.GetActiveNode()
