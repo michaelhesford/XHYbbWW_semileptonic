@@ -82,11 +82,8 @@ class XHYbbWW:
             return self.a.DataFrame.Sum("genWeight").GetValue()
         else:
             return self.a.DataFrame.Count().GetValue()
-
-
-    def PlotDistributions(self,variables):
-        #variables = [pt, met, eta, phi, ...]
-        from math import ceil
+ 
+    def GetDeltaPhi(self):
         CompileCpp('delta_phi.cc')
         self.a.Define('DeltaPhi_jets','DeltaPhi(FatJet_phi[0],FatJet_phi[1])')
         self.a.Define('DeltaPhi_Electron_Higgs','FatJet_phi[0],Electron_phi[0]')
@@ -94,18 +91,18 @@ class XHYbbWW:
         self.a.Define('DeltaPhi_Electron_Wqq','FatJet_phi[1],Electron_phi[0]')
         self.a.Define('DeltaPhi_Muon_Wqq','FatJet_phi[1],Muon_phi[1]')
 
-        name = self.setname
-        c = ROOT.TCanvas("Distributions",name)
-        #c.Divide(2,ceil(len(variables)/2))
-        c.Divide(2,6)
-        c.Clear()
-        for i in range(len(variables)):
-            c_ind=i+1
-            c.cd(c_ind)
-            hist = self.a.DataFrame.Histo1D(('hist','#%s' %(variables[i])),variables[i],'norm')  
-            hist.Draw()
-            c.Draw()
-        c.Print("Distributions_"+self.setname+".pdf")
+        return self.a.GetActiveNode()
+
+    def HistPlotter(self,name,title,bins,x_min,x_max,var,dim):
+        #self.a.Cut('Empties','{} >= 0'.format(var))
+        if dim == 1:
+            hist_tuple = ('{}'.format(name),'{}'.format(title),bins,x_min,x_max)
+            hist = self.a.DataFrame.Histo1D(hist_tuple,'{}'.format(var))
+        '''
+        elif dim == 2:
+            hist = self.a.DataFrame.Histo2D(hist_tuple,var[0],[var1],'norm') # ehhh whatever
+        '''
+        return hist 
 
     def KinematicSnap(self):
         self.NPROC = self.getNweighted()
