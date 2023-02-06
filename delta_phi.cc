@@ -4,8 +4,11 @@
 
 using namespace ROOT::VecOps;
 
-RVec<float> DeltaPhi(RVec<float> phi1, RVec<float> phi2){
+float DeltaPhi(RVec<float> phi1, RVec<float> phi2, RVec<int> idxs){
+    // Get the indices
+    int idx1 = idxs[0];
+    int idx2 = idxs[1];
     // Calculate delta phi between two objects
-    float delta_phi = hardware::DeltaPhi(phi1[0],phi2[0]);
-    return {delta_phi};
+    float delta_phi = hardware::DeltaPhi(phi1[idx1],phi2[idx2]);
+    return delta_phi;
 }
