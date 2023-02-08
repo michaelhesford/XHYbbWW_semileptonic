@@ -1,136 +1,81 @@
 import ROOT
 from XHYbbWW_class import SplitUp
-from TIMBER.Analyzer import analyzer
+from TIMBER.Analyzer import analyzer, HistGroup
 from TIMBER.Tools.Common import CompileCpp
+from TIMBER.Tools.Plot import *
 from argparse import ArgumentParser
 
-parser = ArgumentParser()
 
-'''
-parser.add_argument('-s', type=str, dest='setname',
-                    action='store', required=True,
-                    help='Setname to process.')
-parser.add_argument('-y', type=int, dest='year',
-                    action='store', required=True)
-'''
-parser.add_argument('-j', type=int, dest='ijob',
-                    action='store', default=1,
-                    help='Job number')
-parser.add_argument('-n', type=int, dest='njobs',
-                    action='store', default=1,
-                    help='Number of jobs')
+if __name__ == "__main__":
+    parser = ArgumentParser()
+    parser.add_argument('--MX', type=int, dest='mx',
+			action='store', help='X mass')
+    parser.add_argument('--MY', type=int, dest='my',
+			action='store', help='Y mass')
+    parser.add_argument('-y', type=str, dest='year',
+			action='store', help='year')
+    args = parser.parse_args()
 
-args = parser.parse_args()
+    setname = 'XHY-{}-{}_{}'.format(args.mx, args.my, args.year)
+    filename = 'raw_nano/Signal/{}.txt'.format(setname)
+    #filename='9D389A37-CDE5-7F42-9458-D1DE3405CAEC.root'
+    variables = [
+	'nElectron',
+	'nMuon',
+	'Electron_pt',
+	'Muon_pt',
+	'FatJet_msoftdrop',
+	'FatJet_pt',
+	'DeltaPhi_jets',
+	'DeltaPhi_Electron_Higgs',
+	'DeltaPhi_Muon_Higgs',
+	'DeltaPhi_Electron_Wqq',
+	'DeltaPhi_Muon_Wqq',
+	'MET_pt','MET_phi']
 
-MxMy=[['300','125'],['500','300'],['1000','400'],['3000','500'],['3500','500'],['4000','1000']]
-setnames = ['XHY-'+i[0]+'-'+i[1] for i in MxMy]
+    CompileCpp('delta_phi.cc')
 
-variables=['nElectron','nMuon','Electron_pt[0]','Muon_pt[0]','FatJet_msoftdrop[0]','FatJet_msoftdrop[1]','FatJet_pt[0]','FatJet_pt[1]','DeltaPhi_jets','DeltaPhi_Electron_Higgs','DeltaPhi_Muon_Higgs','DeltaPhi_Electron_Wqq','DeltaPhi_Muon_Wqq','MET_pt','MET_phi']
+    ana = analyzer(filename)
 
-variables_snap=['nElectron','nMuon','Electron_pt','Muon_pt','FatJet_msoftdrop','FatJet_pt','DeltaPhi_jets','DeltaPhi_Electron_Higgs','DeltaPhi_Muon_Higgs','DeltaPhi_Electron_Wqq','DeltaPhi_Muon_Wqq','MET_pt','MET_phi']
+    # first ensure there are no events with 0 jets/electrons/muons so we don't segfault trying to access nonexistent indices
+    before = ana.DataFrame.Sum("genWeight")
+    ana.Cut('jetsCut','nFatJet > 1')
+    ana.Cut('eleCut','nElectron > 1')
+    ana.Cut('muCut','nMuon > 1')
+    after = ana.DataFrame.Sum("genWeight") 
+    # Get the deltaPhi of the 0th and 1st object in every event 
+    ana.Define('DeltaPhi_jets','DeltaPhi(FatJet_phi, FatJet_phi, {0,1})')
+    ana.Define('DeltaPhi_Electron_Higgs','DeltaPhi(FatJet_phi, Electron_phi, {0,1})')
+    ana.Define('DeltaPhi_Muon_Higgs','DeltaPhi(FatJet_phi, Muon_phi, {0,1})')
+    ana.Define('DeltaPhi_Electron_Wqq','DeltaPhi(FatJet_phi, Electron_phi, {0,1})')
+    ana.Define('DeltaPhi_Muon_Wqq','DeltaPhi(FatJet_phi, Muon_phi, {0,1})')
 
-var_dict={k:None for k in variables}
-for var in variables:
-    if 'nElectron' or 'nMuon' in var:
-        var_dict[var] = [10,0,10]
-    elif 'msoftdrop' in var:
-        var_dict[var] = [30,40,200]
-    elif 'Electron_pt' or 'Muon_pt' in var:
-        var_dict[var] = [30,20,200]
-    elif 'DeltaPhi' in var:
-        var_dict[var] = [8,0,4]
-    else:
-        var_dict[var] = [30,200,2000] #Fat jet pt
+    # create a histgroup to store all the histograms of variables easily
+    histgroup = HistGroup(setname)
+    for varname in variables:
+	histname = '{}_{}'.format(setname, varname)
+	# Arguments for binning that we pass to the RDataFrame::Histo1D() method
+	if varname.startswith('n'):
+	    hist_tuple = (histname,histname,10,0,10)
+	elif 'pt' in varname:
+	    hist_tuple = (histname,histname,40,0,2000)
+	elif 'msoftdrop' in varname:
+	    hist_tuple = (histname,histname,30,0,3000)
+	elif 'DeltaPhi' in varname or varname=='MET_phi':
+	    hist_tuple = (histname,histname,30,-3.2,3.2)
+        else:
+            hist_tuple = (histname,histname,30,40,200)
+	print(hist_tuple)
+	print(varname)
+	hist = ana.GetActiveNode().DataFrame.Histo1D(hist_tuple,varname)
+	hist.GetValue() # This gets the actual TH1 instead of a pointer to the TH1
+        histgroup.Add(varname,hist)
 
-var_names=var_dict.keys()
-binning=var_dict.values()
+    # save the raw histos to a file
+    outFile = ROOT.TFile.Open('distributions/{}_loose.root'.format(setname),'RECREATE')
+    outFile.cd()
+    histgroup.Do('Write') # This will call TH1.Write() for all of the histograms in the group
+    outFile.Close()
 
-CompileCpp('delta_phi.cc')
-
-for i in range(len(var_names)):
-    var = var_names[i]
-    exec("c{} = ROOT.TCanvas('{}','{}')".format(i,var,var))
-    exec('c{}.Divide(2,3)'.format(i))
-
-for i in range(len(setnames)):
-    name = setnames[i]
-    filename = 'raw_nano/Signal/{}_18.txt'.format(name)
-
-    infiles = SplitUp(filename, args.njobs)[args.ijob-1]
-    ana = analyzer(infiles)
-
-    ana.Define('DeltaPhi_jets','DeltaPhi(FatJet_phi[0],FatJet_phi[1])')
-    ana.Define('DeltaPhi_Electron_Higgs','DeltaPhi(FatJet_phi[0],Electron_phi[0])')
-    ana.Define('DeltaPhi_Muon_Higgs','DeltaPhi(FatJet_phi[0],Muon_phi[0])')
-    ana.Define('DeltaPhi_Electron_Wqq','DeltaPhi(FatJet_phi[1],Electron_phi[0])')
-    ana.Define('DeltaPhi_Muon_Wqq','DeltaPhi(FatJet_phi[1],Muon_phi[1])')
-
-    ana.Snapshot(variables_snap,'PlotData_{}.root'.format(name),'Events', openOption='RECREATE',saveRunChain=True)
-
-    infile=ROOT.TFile.Open('PlotData_{}.root'.format(name),'READ')
-    tree=infile.Get('Events')
-
-    for j in range(len(var_names)):
-        var = var_names[j]
-        bins = binning[j]
-
-        exec('c{}.cd({})'.format(j,i+1))
- 
-        hist=ROOT.TH1D(name,name,bins[0],bins[1],bins[2])
-
-        nEntries=tree.GetEntries()
-        for event in range(nEntries):
-            tree.GetEntry(event)
-            exec('entry = tree.{}'.format(var))
-            hist.Fill(entry)
-
-        hist.Draw()
-
-    infile.Close()
-
-for i in range(len(var_names)):
-    exec('c{}.Print(distributions/{}.pdf'.format(i,var_names[i]))
-    exec('c{}.Clear()'.format(i))
-
-
-
-
-'''
-        hist_tuple = ('{}'.format(name),'{}'.format(name),bins[0],bins[1],bins[2])
-        hist = ana.DataFrame.Histo1D(hist_tuple,'{}'.format(var))
-        hist.GetValue()
-        hist.Draw()
-'''
-
-'''
-for i in range(len(var_names)):
-
-    var = var_names[i]
-    bins = binning[i]
-
-    c = ROOT.TCanvas(var,var)
-    c.Divide(2,3)
-
-    for j in range(len(setnames)):
-        name = setnames[j]
-        filename = 'raw_nano/Signal/{}_18.txt'.format(name)
-
-        infiles = SplitUp(filename, args.njobs)[args.ijob-1]
-        ana = analyzer(infiles)
-
-        ana.Define('DeltaPhi_jets','DeltaPhi(FatJet_phi[0],FatJet_phi[1])')
-        ana.Define('DeltaPhi_Electron_Higgs','DeltaPhi(FatJet_phi[0],Electron_phi[0])')
-        ana.Define('DeltaPhi_Muon_Higgs','DeltaPhi(FatJet_phi[0],Muon_phi[0])')
-        ana.Define('DeltaPhi_Electron_Wqq','DeltaPhi(FatJet_phi[1],Electron_phi[0])')
-        ana.Define('DeltaPhi_Muon_Wqq','DeltaPhi(FatJet_phi[1],Muon_phi[1])')
-
-        c.cd(j+1)
-
-        hist_tuple = ('{}'.format(name),'{}'.format(name),bins[0],bins[1],bins[2])
-        hist = ana.DataFrame.Histo1D(hist_tuple,'{}'.format(var))
-        hist.GetValue()
-        hist.Draw()
-
-    c.Print('distributions/{}.pdf'.format(var))
-    c.Clear()
-'''
+    # see how many events were lost with the Jet/electron/muon > 2 cut
+    print('electron/muon/Jet > 1 cut efficiency = {}%'.format(after.GetValue()/before.GetValue()*100.))	
