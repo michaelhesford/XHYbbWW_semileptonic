@@ -172,10 +172,12 @@ if __name__ == "__main__":
         idxs = DeltaPhi_idxs[name]
         GetDeltaPhi(name,objects,idxs)
 
+''' #NOT NEEDED, can just assume neutrino mass = 0
     #Use m^2 = E^2 - |p|^2 to calculate mass contribution of MET
     ana.a.Define('MET_mass','GetMETmass(MET_pt,MET_sumEt)')
     ana.a.Define('METfid_mass','GetMETmass(MET_fiducialGenPt,MET_sumEt)')
-    ana.a.Define('MET_eta','GetMETeta()') #return eta = 0
+'''
+    ana.a.Define('MET_eta','GetMETeta()') #return eta = 0 (probably a better way to do this, should sheck if I can just throw zero into the invariant mass function)
 
     ana.a.Define('W_vect','hardware::TLvector(Dijet_pt[0],Dijet_eta[0],Dijet_phi[0],Dijet_msoftdrop[0])')
     ana.a.Define('CloseJet_vect','hardware::TLvector(Jet_pt[CloseIdx],Jet_eta[CloseIdx],Jet_phi[CloseIdx],Jet_mass[CloseIdx])')
@@ -240,11 +242,6 @@ if __name__ == "__main__":
         histgroup.Add(varname,hist)
 
     # save the raw histos to a file
-    if signal: #AHHH CHANGE THIS AFTER THE TEST WORKS CHANGE THE DEST AFTER THE TEST AHHHH
-        action='RECREATE'
-    elif not signal:
-        action='RECREATE'
-    #file_path='plots/distributions/root/{}_TEST.root'.format(setname) #GET RID OF THE TEST AHHH
     outFile = ROOT.TFile.Open('{}_{}_{}.root'.format(setname,year,args.ijob),'RECREATE')
     outFile.cd()
     histgroup.Do('Write') # This will call TH1.Write() for all of the histograms in the group
