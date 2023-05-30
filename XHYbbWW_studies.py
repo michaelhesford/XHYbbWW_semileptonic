@@ -22,12 +22,12 @@ def XHYbbWW_studies(self):
     ##### NEW VARIABLES FOR LATER USE #####
 
     #W_leptonic transverse mass
-    self.a.Define('W_massTran','TransverseMass(MET_pt,IsoLepton_pt,MET_phi,IsoLepton_phi)') #Transverse W mass
-    self.a.Define('W_massTran_genMET','TransverseMass(MET_fiducialGenPt,IsoLepton_pt,MET_fiducialGenPhi,IsoLepton_phi)') #using generator-level MET variables
+    self.a.Define('W_massTran','TransverseMass(MET_pt,Lepton_pt,MET_phi,Lepton_phi)') #Transverse W mass
+#    self.a.Define('W_massTran_genMET','TransverseMass(MET_fiducialGenPt,Lepton_pt,MET_fiducialGenPhi,Lepton_phi)') #using generator-level MET variables
 
     #Lorentz 4-vectors
     self.a.Define('MET_vect','hardware::TLvector(MET_pt,0,MET_phi,0)') #neutrino mass negligable, for now assuming MET_eta = 0 (p_z = 0)
-    self.a.Define('Lepton_vect','hardware::TLvector(IsoLepton_pt,IsoLepton_eta,IsoLepton_phi,IsoLepton_mass)')
+    self.a.Define('Lepton_vect','hardware::TLvector(Lepton_pt,Lepton_eta,Lepton_phi,Lepton_mass)')
     self.a.Define('Wqq_vect','hardware::TLvector(Wqq_pt,Wqq_eta,Wqq_phi,Wqq_msoftdrop)')
     self.a.Define('Hbb_vect','hardware::TLvector(Higgs_pt,Higgs_eta,Higgs_phi,Higgs_msoftdrop)')
 
@@ -41,7 +41,9 @@ def XHYbbWW_studies(self):
     #######################################
 
     taggers = ['particleNetMD']
-    # N-1 - essentially set up mechanics with JetNminus1Group() and LeptonNminus1Group () to automate the process via TIMBER -> a.Nminus1()
+
+    '''
+    # UPDATE LEPTON DEFINITIONS (NO LONGER USING "ISOLEPTON")
     for t in taggers:
         Higgs_tagger = '{}_HbbvsQCD'.format(t)
         Wqq_tagger = '{}_WqqvsQCD'.format(t)
@@ -58,7 +60,7 @@ def XHYbbWW_studies(self):
             elif n == 'full':   # full cuts, has all N of them
 
                 # this key ALWAYS exists in nminusNodes by default. This is the node which has all of the cuts applied
-		'''
+		
 			|
 		       / \
 		      /   \
@@ -70,7 +72,7 @@ def XHYbbWW_studies(self):
 			     [cut3] 
 				 \
 				['full'] <- this is the node with every cut made
-		'''
+		
                 # this will effectively plot the Y mass (W1+W2) with EVERY other cut that we've defined
                 #	- mH, mWqq, Higgs_tag, Wqq_tag
                 var = ['Y_mass','W_massInv','W_massTran','W_massTran_genMET']
@@ -112,41 +114,42 @@ def XHYbbWW_studies(self):
             else:
                 print('N-1: Plotting {} for node {}'.format(var, n))
                 studiesPlots.Add(n+'_nminus1',nminusNodes[n].DataFrame.Histo1D((n+'_nminus1',n+'_nminus1',bins[0],bins[1],bins[2]),var,'weight__nominal'))
+    '''
 
-	# now we want to plot mX vs mY for QCD, ttbar, and signal
-        for t in taggers:
-            self.ApplyMassCuts()
-            start=self.a.GetActiveNode()
+    # now we want to plot mX vs mY for QCD, ttbar, and signal
+    for t in taggers:
+        self.ApplyMassCuts()
+        start=self.a.GetActiveNode()
 
-            # We use Wqq tagging scores to divide data into two regions: signal (enriched in signal) and control (enriched in background)
-            #    - Signal:    Wqq > 0.8
-            #    - Control:    Wqq < 0.8
-            # We define a pass/fail criteria for the Hbb score within each region 
-            #   - Region 1 (fail):      Hbb < 0.94
-            #   - Region 2 (pass):      Hbb > 0.94
+        # We use Wqq tagging scores to divide data into two regions: signal (enriched in signal) and control (enriched in background)
+        #    - Signal:    Wqq > 0.8
+        #    - Control:    Wqq < 0.8
+        # We define a pass/fail criteria for the Hbb score within each region 
+        #   - Region 1 (fail):      Hbb < 0.94
+        #   - Region 2 (pass):      Hbb > 0.94
 
-            SR=self.ApplyWTag('SR',t)
-            SR_FP=self.ApplyHiggsTag('SR',t)
+        SR=self.ApplyWTag('SR',t)
+        SR_FP=self.ApplyHiggsTag('SR',t)
             
-            self.a.SetActiveNode(start)
-            CR=self.ApplyWTag('CR',t)
-            CR_FP=self.ApplyHiggsTag('CR',t)
+        self.a.SetActiveNode(start)
+        CR=self.ApplyWTag('CR',t)
+        CR_FP=self.ApplyHiggsTag('CR',t)
   
-            nodes={}
-            nodes.update(SR_FP)
-            nodes.update(CR_FP)
+        nodes={}
+        nodes.update(SR_FP)
+        nodes.update(CR_FP)
 
-            bins = [80,0,4500]           
+        bins = [80,0,4500]           
 
-            for node in nodes.keys():
-                self.a.SetActiveNode(nodes[node])
-                print('MX vs MY: Plotting for {}'.format(node))
-                studiesPlots.Add('MXvsMY_{}'.format(node), self.a.DataFrame.Histo2D(('MXvsMY_{}'.format(node), 'X vs Y Invariant Mass - {} {}'.format(node.split('_')[1],node.split('_')[0]), bins[0], bins[1], bins[2], bins[0], bins[1], bins[2]), 'X_mass', 'Y_mass', 'weight__nominal'))           
-        outFile = ROOT.TFile.Open('{}_{}_{}_studies.root'.format(self.setname,self.year,self.ijob),'RECREATE')
-        outFile.cd()
-        studiesPlots.Do('Write') 
-        self.a.PrintNodeTree('NodeTree.pdf',verbose=True)
-        outFile.Close()    
+        for node in nodes.keys():
+            self.a.SetActiveNode(nodes[node])
+            print('MX vs MY: Plotting for {}'.format(node))
+            studiesPlots.Add('MXvsMY_{}'.format(node), self.a.DataFrame.Histo2D(('MXvsMY_{}'.format(node), 'X vs Y Invariant Mass - {} {}'.format(node.split('_')[1],node.split('_')[0]), bins[0], bins[1], bins[2], bins[0], bins[1], bins[2]), 'X_mass', 'Y_mass', 'weight__nominal'))           
+    outFile = ROOT.TFile.Open('{}_{}_{}_studies.root'.format(self.setname,self.year,self.ijob),'RECREATE')
+    outFile.cd()
+    studiesPlots.Do('Write') 
+    self.a.PrintNodeTree('NodeTree.pdf',verbose=True)
+    outFile.Close()    
 
 if __name__ == "__main__":
     parser = ArgumentParser()
@@ -167,8 +170,8 @@ if __name__ == "__main__":
 
     ana = XHYbbWW(setname,year,ijob,njobs)
 
-    ana.BasicKinematics()
-    ana.ApplyStandardCorrections()
+#    ana.BasicKinematics()
+#    ana.ApplyStandardCorrections()
     ana.Dijets()
     ana.SignalLepton()
 

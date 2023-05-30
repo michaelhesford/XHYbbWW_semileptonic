@@ -3,44 +3,42 @@
 #include <stdio.h>
 #include <cmath>
 
-using namespace ROOT::VecOps;
-
-RVec<int> PickDijets(RVec<float> jet_eta, RVec<float> jet_phi, RVec<float> jet_mass, RVec<int> leptonIdx, RVec<float> electron_phi, RVec<float> muon_phi) {
-    // Looking for the closest jet to our lepton (the W candidate) as well as a jet separated by both by Pi/2 -- update minimum delta phi requirement for W/lepton
+RVec<int> PickDijets(RVec<float> eta, RVec<float> phi, RVec<float> mass) {
+    // We are looking for a lead jet separated by a sublead jet by at least 90 degrees
     int jet0Idx = -1;
     int jet1Idx = -1;
-    RVec<float> lepton_phi = muon_phi; // lets assume its a muon...
-    int lepId = leptonIdx[1];
-    if (lepId == -1) { // Our good lepton is an electron
-        lepton_phi = electron_phi;
-        lepId = leptonIdx[0];
-    }
-    for (int ijet=0; ijet<jet_mass.size(); ijet++) {
-        if (jet0Idx == -1) { // no jet selected yet
-            if (jet_mass[ijet] > 50 && jet_eta[ijet] < 2.4 && std::abs(hardware::DeltaPhi(jet_phi[ijet],lepton_phi[lepId])) < M_PI/2) {
-                jet0Idx = ijet;
-            }
-        }
-        else {
-            if (jet_mass[ijet] > 50 && jet_eta[ijet] < 2.4 && std::abs(hardware::DeltaPhi(jet_phi[ijet],lepton_phi[lepId])) < std::abs(hardware::DeltaPhi(jet_phi[jet0Idx],lepton_phi[lepId]))) {
-                jet0Idx = ijet;
-            }
+    // Since the vectors are ordered by pT, the first jet should roughly be our Higgs. 
+    for (int ijet=0; ijet<eta.size(); ijet++) {
+        if (std::abs(eta[ijet]) < 2.4 && mass[ijet] > 50) {
+            // we've found our lead jet, break loop
+            jet0Idx = ijet;
+            break;
         }
     }
-    
-    for (int ijet=0; ijet<jet_mass.size(); ijet++) {
-        if (jet_mass[ijet] > 50 && jet_eta[ijet] < 2.4 && std::abs(hardware::DeltaPhi(jet_phi[ijet],jet_phi[jet0Idx])) > M_PI/2) {
+    // if no lead jet found somehow, return 
+    if (jet0Idx == -1) {
+        return {-1, -1};
+    }
+    // now loop over the remaining jets,
+    for (int ijet=jet0Idx; ijet<eta.size(); ijet++) {
+        if (std::abs(eta[ijet]) < 2.4 && mass[ijet] > 50 && std::abs(hardware::DeltaPhi(phi[jet0Idx],phi[ijet])) > M_PI/2) {
             jet1Idx = ijet;
+            break;
         }
     }
-    return {jet0Idx,jet1Idx};
+    if (jet1Idx == -1) {
+        return {-1,-1};
+    }
+    else {
+        return {jet0Idx,jet1Idx};
+    }
 }
 
-int LeptonPre(RVec<float> pt, RVec<float> eta, RVec<float> iso) {
+int SignalLepton(RVec<float> lep_pt, RVec<float> lep_eta, RVec<float> lep_phi, RVec<float> lep_iso, float H_phi, float W_phi) {
 // function for lepton preselction (will expand/make separate for electrons/muons in future)
     int leptonIdx = -1;
-    for (int il=0; il<pt.size(); il++) {
-        if (pt[il] > 10 && std::abs(eta[il]) < 2.5 && iso[il] < 0.3) {
+    for (int il=0; il<lep_pt.size(); il++) {
+        if (lep_pt[il] > 25 && std::abs(lep_eta[il]) < 2.4 && lep_iso[il] < 0.2 && std::abs(hardware::DeltaPhi(lep_phi[il],W_phi)) < 2.5 && std::abs(hardware::DeltaPhi(lep_phi[il],W_phi)) > 1 && std::abs(hardware::DeltaPhi(lep_phi[il],H_phi)) > M_PI/2) {
             leptonIdx = il;
             break;
         }
@@ -67,45 +65,81 @@ RVec<int> LeptonIdx(int electronIdx, int muonIdx, RVec<float> electron_pt, RVec<
         }
     }
     return {e_index,m_index};
-} 
+}
 
-int GetClosestJet(RVec<int> leptonIdx, RVec<float> electron_phi, RVec<float> muon_phi, RVec<float> jet_phi) {
-    RVec<float> lepton_phi = muon_phi; // assume lepton a muon...
-    int lepId = leptonIdx[1];
-    if (lepId == -1) { // Our good lepton is an electron
-        lepton_phi = electron_phi;
-        lepId = leptonIdx[0];
-    }
-    int jet_index = 0;
-    for (int ij=0; ij<jet_phi.size(); ij++) {
-        if (abs(hardware::DeltaPhi(lepton_phi[lepId],jet_phi[ij])) < abs(hardware::DeltaPhi(lepton_phi[lepId],jet_phi[jet_index]))) {
-            jet_index = ij;
+RVec<int> JetMasses(RVec<float> mass) { // Selects jets with pt > 50 GeV
+    int jet0Idx = -1;
+    int jet1Idx = -1;
+    int jet2Idx = -1;
+    for (int ijet = 0; ijet<mass.size(); ijet++) {   
+        if (mass[ijet] > 50) {
+            jet0Idx = ijet;
+            break;
         }
     }
-    return jet_index;
-} 
-   
-float GetMETmass(float pt, float Et) {
-    float c = 2.998*pow(10,8);
-    float exp = 0.5;
-    float mass = pow((Et*Et-pt*pt*pow(c,2))/pow(c,4),exp);
-    return mass;
+    if (jet0Idx == -1) {
+        return {-1,-1,-1};
+    }
+    for (int ijet = jet0Idx+1; ijet<mass.size(); ijet++) {
+        if (mass[ijet] > 50) {
+            jet1Idx = ijet;
+            break;
+        }
+    }
+    if (jet1Idx == -1) {
+        return {jet0Idx,-1,-1};
+    }
+    for (int ijet = jet1Idx+1; ijet<mass.size(); ijet++) {
+        if (mass[ijet] > 50) {
+            jet2Idx = ijet;
+            break;
+        }
+    }
+    if (jet2Idx == -1) {
+        return {jet0Idx,jet1Idx,-1};
+    }
+    else {
+        return {jet0Idx,jet1Idx,jet2Idx};
+    }
 }
 
-float GetMETeta() {
-    float eta = 0;
-    return eta;
+RVec<int> FindMothersPdgId(RVec<int> genpart_id, RVec<int> selected_genpart_mother_indices){
+
+    std::size_t Ni = selected_genpart_mother_indices.size();
+    RVec<int> mother_pdgids(Ni);
+    for(std::size_t i=0; i<Ni; i++) {
+        mother_pdgids[i] = genpart_id[selected_genpart_mother_indices[i]];
+    }
+    return mother_pdgids;
+
 }
 
-float TransverseMass(float lep_pt, float MET) {
-    float mass_tran = pow(2*lep_pt*MET,0.5);
-    return mass_tran;
+int HighestPtIdx(RVec<float> lep_pt){
+    int idx = -1;
+    float pt = 0;
+    for (int id = 0; id<lep_pt.size(); id++) {
+        if (lep_pt[id] > pt) {
+            idx = id;
+            pt = lep_pt[id];
+        }
+    }
+    return idx;
 }
 
+float TransverseMass(float MET_pt, float obj_pt, float MET_phi, float obj_phi) {
+    return sqrt(2.0*MET_pt*obj_pt*(1-cos(hardware::DeltaPhi(MET_phi,obj_phi))));
+}
 
-
-
-
-
-
-
+/*
+int GenSignalLepton(RVec<float> lep_pt, RVec<float> lep_eta, RVec<float> lep_phi, float H_phi, float W_phi) {
+//function for lepton preselction (will expand/make separate for electrons/muons in future)
+    RVec<int> leptonIdx = -1;
+    for (int il=0; il<lep_pt.size(); il++) {
+        if (lep_pt[il] > 25 && std::abs(lep_eta[il]) < 2.4 && std::abs(hardware::DeltaPhi(lep_phi[il],W_phi)) < 2.5 && std::abs(hardware::DeltaPhi(lep_phi[il],W_phi)) > 1 && std::abs(hardware::DeltaPhi(lep_phi[il],H_phi)) > M_PI/2) {
+            leptonIdx = il
+            break;
+        }
+    }
+     return leptonIdx;
+}
+*/

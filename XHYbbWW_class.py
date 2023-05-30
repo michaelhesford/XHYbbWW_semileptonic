@@ -34,11 +34,19 @@ def SplitUp(filename,npieces,nFiles=False):
     return out
 
 class XHYbbWW:
-    def __init__(self, inputfile, ijob, njobs):
+    def __init__(self, setname, year, ijob, njobs):
         # format: (raw_nano/data_type/setname_year.txt
+        if 'XHY' in setname:
+            inputfile = 'raw_nano/Signal/{}_{}.txt'.format(setname,year)
+        elif 'QCD' in setname:
+            inputfile = 'raw_nano/Background/QCD/{}_{}.txt'.format(setname,year)
+        elif 'ttbar' in setname:
+            inputfile = 'raw_nano/Background/ttbar/{}_{}.txt'.format(setname,year)
+        elif 'Jets' in setname:
+            inputfile = 'raw_nano/Background/V+Jets/{}_{}.txt'.format(setname,year)
         infiles = SplitUp(inputfile,njobs)[ijob-1]
-        self.setname=inputfile.split('/')[-1].split('_')[0]
-        self.year=inputfile.split('/')[-1].split('_')[-1].split('.')[0]
+        self.setname = setname
+        self.year = year
         self.ijob = ijob
         self.njobs = njobs
 
@@ -53,9 +61,6 @@ class XHYbbWW:
           # self.a.Cut('CorrectMass', 'GenModel_YMass_{} == 1'.format(MY)) 
             self.a.isData = False
  
-        self.ijob = ijob
-        self.njobs = njobs
-     
 	# Cuts from config file
         self.config = OpenJSON('XHYbbWWconfig.json')
         self.cuts = self.config['CUTS']
@@ -332,9 +337,9 @@ class XHYbbWW:
 	assert(SRorCR=='SR' or SRorCR=='CR')
 	checkpoint = self.a.GetActiveNode()
 	Htag = 0.94
-	FLP = {}
+	FP = {}
 	# Higgs fail + cutflow info
-	FLP['fail'] = self.a.Cut('HbbTag_fail','Hbb_{0}_HbbvsQCD < {1}'.format(tagger, Htag))
+	FP['fail_'+SRorCR] = self.a.Cut('HbbTag_fail','Higgs_{0}_HbbvsQCD < {1}'.format(tagger, Htag))
 	if SRorCR=='SR':
 	    self.nHF_SR = self.getNweighted()
 	    self.AddCutflowColumn(self.nHF_SR, 'higgsF_SR')
@@ -344,7 +349,7 @@ class XHYbbWW:
 
 	# Higgs Pass + cutflow
 	self.a.SetActiveNode(checkpoint)
-	FLP['pass'] = self.a.Cut('HbbTag_pass','Hbb_{0}_HbbvsQCD > {1}'.format(tagger, Htag))
+	FP['pass_'+SRorCR] = self.a.Cut('HbbTag_pass','Higgs_{0}_HbbvsQCD > {1}'.format(tagger, Htag))
 	if SRorCR == 'SR':
 	    self.nHP_SR = self.getNweighted()
 	    self.AddCutflowColumn(self.nHP_SR, 'higgsP_SR')
@@ -354,4 +359,4 @@ class XHYbbWW:
 
 	# reset state, return dict
 	self.a.SetActiveNode(checkpoint)
-	return FLP
+	return FP
