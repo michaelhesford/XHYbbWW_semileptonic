@@ -4,6 +4,7 @@ from TIMBER.Tools.Common import CompileCpp, OpenJSON
 from TIMBER.Tools.AutoPU import ApplyPU
 from JMEvalsOnly import JMEvalsOnly
 import TIMBER.Tools.AutoJME as AutoJME
+from collections import OrderedDict
 
 # Helper file for dealing with .txt files containing NanoAOD file locs
 def SplitUp(filename,npieces,nFiles=False):
@@ -34,19 +35,11 @@ def SplitUp(filename,npieces,nFiles=False):
     return out
 
 class XHYbbWW:
-    def __init__(self, setname, year, ijob, njobs):
-        # format: (raw_nano/data_type/setname_year.txt
-        if 'XHY' in setname:
-            inputfile = 'raw_nano/Signal/{}_{}.txt'.format(setname,year)
-        elif 'QCD' in setname:
-            inputfile = 'raw_nano/Background/QCD/{}_{}.txt'.format(setname,year)
-        elif 'ttbar' in setname:
-            inputfile = 'raw_nano/Background/ttbar/{}_{}.txt'.format(setname,year)
-        elif 'Jets' in setname:
-            inputfile = 'raw_nano/Background/V+Jets/{}_{}.txt'.format(setname,year)
+    def __init__(self, inputfile, ijob, njobs):
+        #inputfile format is '(raw_nano or snapshots)/SETNAME_YEAR(maybe _+something else).txt'
         infiles = SplitUp(inputfile,njobs)[ijob-1]
-        self.setname = setname
-        self.year = year
+        self.setname = inputfile.split('/')[1].split('_')[0]
+        self.year = inputfile.split('/')[1].split('_')[1].split('.')[0]
         self.ijob = ijob
         self.njobs = njobs
 
@@ -88,7 +81,7 @@ class XHYbbWW:
         else:
             return self.a.DataFrame.Count().GetValue()
 
-    def BasicKinematics(self):
+    def BasicKinematics(self): #nothing super selective, but should cut out some obviously uninteresting events
 
         self.NSTART = self.getNweighted()
         self.AddCutflowColumn(self.NSTART,'NSTART')
@@ -110,28 +103,11 @@ class XHYbbWW:
         self.NFLAGS = self.getNweighted()
         self.AddCutflowColumn(self.NFLAGS, "NFLAGS")
 
-        #first ensure enough leptons/jets exist to avoid referencing indexes which don't exist
-        self.a.Cut('nLepton','nElectron > 0 || nMuon > 0')
-        self.NLEPTON = self.getNweighted()
-        self.AddCutflowColumn(self.NLEPTON,'NLEPTON')
-
-        #at least one high pt lepton
-        self.a.Cut('Lepton_pt','nElectron == 0 ? Muon_pt[0] > 25 : nMuon == 0 ? Electron_pt[0] > 25 : (Electron_pt[0] > 25 || Muon_pt[0] > 25)')
-        self.LEPPT=self.getNweighted()
-        self.AddCutflowColumn(self.LEPPT,"LEPPT")
-
-        #at least one isolated lepton
-        self.a.Define('IsoElectron','Electron_miniPFRelIso_all < 1')
-        self.a.Define('IsoMuon','Muon_miniPFRelIso_all < 1') 
-        self.a.Cut('nIsoLepton','IsoElectron.size() > 0 || IsoMuon.size() > 0')
-
-        self.LEPISO=self.getNweighted()
-        self.AddCutflowColumn(self.LEPISO,"LEPISO")
-
-        #at least two fat jets
-        self.a.Cut('nFatJet','nFatJet > 1')
-        self.NJET = self.getNweighted()
-        self.AddCutflowColumn(self.NJET,'NJET')
+        #at least one lepton passing pre-selection criteria (see HWWmodules.cc)
+        self.a.Define('isLeptonPre','isLeptonPreselected(nElectron, Electron_pt, Electron_eta, Electron_miniPFRelIso_all, nMuon, Muon_pt, Muon_eta, Muon_miniPFRelIso_all)')
+        self.a.Cut('isLeptonPreselected','isLeptonPre')
+        self.LEPPRE=self.getNweighted()
+        self.AddCutflowColumn(self.LEPPRE,"LEPPRE")
 
         #at least two fat jet w/ mass > 50
         self.a.Define('FatJetHM_msoftdrop','FatJet_msoftdrop > 50')
@@ -140,7 +116,7 @@ class XHYbbWW:
         self.AddCutflowColumn(self.JETMASS,'JETMASS')
 
         #high pt fat jets
-        self.a.Cut('Jet_pt','FatJet_pt[0] > 400 && FatJet_pt[1] > 200')
+        self.a.Cut('Jet_pt','FatJet_pt[0] > 300 && FatJet_pt[1] > 200')
         self.JETPT=self.getNweighted()
         self.AddCutflowColumn(self.JETPT,"JETPT")
 
@@ -148,18 +124,27 @@ class XHYbbWW:
         self.a.Cut('eta_cut', 'abs(FatJet_eta[0]) < 2.4 && abs(FatJet_eta[1]) < 2.4') # no super forward jets
 	self.JETETA = self.getNweighted()
 	self.AddCutflowColumn(self.JETETA, "JETETA")
+ 
+        return self.a.GetActiveNode()
+
+    def GetXsecScale(self):
+        lumi = self.config['lumi{}'.format(self.year if 'APV' not in self.year else 16)]
+        xsec = self.config['XSECS'][self.setname]
+        if self.a.genEventSumw == 0:
+            raise ValueError('%s %s: genEventSumw is 0'%(self.setname, self.year))
+        return lumi*xsec/self.a.genEventSumw
 
  # corrections - used in both snapshots and selection
-    def ApplyStandardCorrections(self, snapshot=False):
-	# first apply corrections for snapshot phase
-	if snapshot:
+    def ApplyStandardCorrections(self, post_snapshot=False):
+	# first apply corrections for right after snapshot phase
+	if post_snapshot:
 	    if self.a.isData:
 		# NOTE: LumiFilter requires the year as an integer 
 		lumiFilter = ModuleWorker('LumiFilter','TIMBER/Framework/include/LumiFilter.h',[int(self.year) if 'APV' not in self.year else 16])    # defaults to perform "eval" method 
 		self.a.Cut('lumiFilter',lumiFilter.GetCall(evalArgs={"lumi":"luminosityBlock"}))	       # replace lumi with luminosityBlock
 		if self.year == '18':
 		    HEM_worker = ModuleWorker('HEM_drop','TIMBER/Framework/include/HEM_drop.h',[self.setname if 'Muon' not in self.setname else self.setname[10:]])
-		    self.a.Cut('HEM','%s[0] > 0'%(HEM_worker.GetCall(evalArgs={"FatJet_eta":"Trijet_eta","FatJet_phi":"Trijet_phi"})))
+		    self.a.Cut('HEM','%s[0] > 0'%(HEM_worker.GetCall(evalArgs={"FatJet_eta":"FatJet_eta","FatJet_phi":"FatJet_phi"})))
 	    else:
 		self.a = ApplyPU(self.a, 'XHYbbWWpileup.root', '20{}'.format(self.year), ULflag=True, histname='{}_{}'.format(self.setname,self.year))
 		if self.year == '16' or self.year == '17' or 'APV' in self.year:
@@ -170,7 +155,8 @@ class XHYbbWW:
 		    self.a.AddCorrection(Correction('HEM_drop','TIMBER/Framework/include/HEM_drop.h',[self.setname],corrtype='corr'))
 
 	    self.a = AutoJME.AutoJME(self.a,'FatJet', '20{}'.format(self.year), self.setname if 'Muon' not in self.setname else self.setname[10:])
-	    self.a.MakeWeightCols(extraNominal='genWeight' if not self.a.isData else '')
+            #self.a.MakeWeightCols(extraNominal='genWeight' if not self.a.isData else '') #this will have been done separately before the snapshot
+            #self.a.MakeWeightCols(extraNominal='' if self.a.isData else 'genWeight*%s'%self.GetXsecScale())
 
 	# now for selection
 	else:
@@ -188,34 +174,34 @@ class XHYbbWW:
 	return self.a.GetActiveNode()
 
     def Snapshot(self, node=None):
+        #for now, snapshot without applying any corrections (deal w/ this stuff later)
         startNode = self.a.GetActiveNode()
         if node == None:
             node = self.a.GetActiveNode()
-        
-        
+              
         columns = [
-        'nJet','nFatJet','FatJet_JES_nom','FatJet_eta','FatJet_msoftdrop','FatJet_pt','FatJet_phi',
+        'nJet','nFatJet','FatJet_eta','FatJet_msoftdrop','FatJet_pt','FatJet_phi',
         'FatJet_deepTagMD_HbbvsQCD', 'FatJet_deepTagMD_ZHbbvsQCD',
         'FatJet_deepTagMD_WvsQCD', 'FatJet_deepTag_TvsQCD', 'FatJet_particleNet_HbbvsQCD',
-        'FatJet_particleNet_TvsQCD', 'FatJet_particleNetMD.*', 'FatJet_rawFactor', 'FatJet_tau*',
-        'FatJet_jetId', 'nFatJet','FatJet_particleNetMD_Xqq', 'FatJet_particleNetMD_Xcc', 'FatJet_particleNet_QCD',
-        'FatJet_particleNet_WvsQCD','nElectron','Electron_eta','Electron_pt','Electron_mass','Electron_phi','Electron_miniPFRelIso_all',
-        'Electron_dxy','Electron_dz','Electron_sip3d','Electron_hoe','Electron_eInvMinusPInv','Electron_deltaEtaSC','Electron_sieie',
-        'Electron_scEtOverPt','nMuon','Muon_eta','Muon_pt','Muon_mass','Muon_phi','Muon_miniPFRelIso_all','Muon_dxy','Muon_dz', 'Muon_sip3d',
-        'Muon_mediumPromptId','Muon_segmentComp','Muon_isGlobal','HLT_PFHT.*', 'HLT_PFJet.*', 'HLT_AK8.*', 'HLT_Mu50',
-        'HLT_TkMu50','HLT_TkMu100','HLT_IsoMu24','HLT_IsoMu27','HLT_Ele27_WPTight_Gsf','HLT_Ele35_WPTight_Gsf',
-        'HLT_Ele32_WPTight_Gsf','HLT_Photon175','HLT_Photon200','HLT_Ele115_CaloIdVT_GsfTrkIdT','HLT_OldMu100',
-        'event', 'eventWeight', 'luminosityBlock', 'run','NSTART','NFLAGS','NLEPTON','LEPPT','LEPISO','NJET','JETMASS','JETPT','JETETA']
-        
-
+        'FatJet_particleNet_TvsQCD', 'FatJet_particleNet_QCD',
+        'FatJet_particleNet_WvsQCD','FatJet_particleNetMD*', 'FatJet_rawFactor', 'FatJet_tau*',
+        'FatJet_jetId','nMuon','Muon_*','nElectron','Electron_*','HLT_Mu50','HLT_TkMu*','HLT_IsoMu*','HLT_OldMu100',
+        'MET_*','HLT_*MET*','HLT_Photon*','HLT_Ele*','HLT_PFHT*', 'HLT_PFJet*', 'HLT_AK8*','weight__nominal','genWeight',
+        'event','eventWeight','luminosityBlock','run','NSTART','NFLAGS','LEPPRE','NJET','JETMASS',
+        'JETPT','JETETA','Pileup*','fixedGridRhoFastjetAll','L1PreFiringWeight*'
+        ]         
+       
+	#'FatJet_JES_nom', 
         # append to columns list if not Data
         if not self.a.isData:
-            columns.extend(['GenPart_.*', 'nGenPart', 'genWeight', 'GenModel*'])
+            columns.extend(['GenPart_*', 'nGenPart', 'genWeight'])
+            
             columns.extend(['FatJet_JES_up','FatJet_JES_down',
                             'FatJet_JER_nom','FatJet_JER_up','FatJet_JER_down',
                             'FatJet_JMS_nom','FatJet_JMS_up','FatJet_JMS_down',
                             'FatJet_JMR_nom','FatJet_JMR_up','FatJet_JMR_down'])
-            columns.extend(['Pileup__nom','Pileup__up','Pileup__down','Pdfweight__nom','Pdfweight__up','Pdfweight__down'])
+            columns.extend(['Pileup__nom','Pileup__up','Pileup__down'])
+                            #'Pdfweight__nom','Pdfweight__up','Pdfweight__down'])
             if self.year == '16' or self.year == '17' or 'APV' in self.year:
 		#columns.extend(['Prefire__nom','Prefire__up','Prefire__down'])
                 columns.extend(['L1PreFiringWeight_Nom', 'L1PreFiringWeight_Up', 'L1PreFiringWeight_Dn'])	# these are the default columns in NanoAODv9
@@ -254,19 +240,22 @@ class XHYbbWW:
 
     def SignalLepton(self):
 
-        self.a.Define('ElectronIdx','SignalLepton(Electron_pt,Electron_eta,Electron_phi,Electron_miniPFRelIso_all,Higgs_phi,Wqq_phi)')
-        self.a.Define('MuonIdx','SignalLepton(Muon_pt,Muon_eta,Muon_phi,Muon_miniPFRelIso_all,Higgs_phi,Wqq_phi)')  
-        self.a.Define('LeptonIdxs','LeptonIdx(ElectronIdx,MuonIdx,Electron_pt,Muon_pt)') #output = {electronIdx,muonIdx}
-        self.a.Cut('Lepton_cut','LeptonIdxs[0] != -1 || LeptonIdxs[1] != -1') #at least one good lepton
+        self.a.Define('kinEleIdx','kinElectron(Electron_pt,Electron_eta,Electron_phi,Higgs_phi,Wqq_phi)')
+        self.a.Define('kinMuIdx','kinMuon(Muon_pt,Muon_eta,Muon_phi,Higgs_phi,Wqq_phi)')  
+        self.a.Cut('kinLepton_cut','kinEleIdx != -1 || kinMuIdx != -1') #at least one good lepton
+        self.a.Define('LeptonType','LeptonIdx(kinEleIdx,kinMuIdx,Electron_pt,Muon_pt)') #picks higher pt signal lepton - output = 0 (lepton is electron) or 1 (lepton is muon)
+
+        self.a.Cut('lepIsolation','LeptonType == 0? Electron_miniPFRelIso_all[kinEleIdx] < {} : Muon_miniPFRelIso_all[kinMuIdx] < {}'.format(self.cuts['ELECTRON']['RelIso'],self.cuts['MUON']['RelIso']))
+        self.a.Cut('leptonQuality','LeptonType == 0? Electron_mvaFall17V2noIso_WP80[kinEleIdx] : Muon_mediumId[kinMuIdx]') #"naively" using the standard WP80 boolean for now; eventually must examine more closely efficiency of lepton cuts and find optimal cut value(s) for Electron_mvaFall17V2noIso discriminant
 
         self.SIGLEP = self.getNweighted()
         self.AddCutflowColumn(self.SIGLEP,'SIGLEP')
 
-        #For ease, merge some lepton columns that will be useful later (for lepton-type specific variables, use LeptonIdxs to determine lepton type)
-        self.a.Define('Lepton_pt','LeptonIdxs[0] == -1 ? Muon_pt[LeptonIdxs[1]] : Electron_pt[LeptonIdxs[0]]')
-        self.a.Define('Lepton_eta','LeptonIdxs[0] == -1 ? Muon_eta[LeptonIdxs[1]] : Electron_eta[LeptonIdxs[0]]')
-        self.a.Define('Lepton_phi','LeptonIdxs[0] == -1 ? Muon_phi[LeptonIdxs[1]] : Electron_phi[LeptonIdxs[0]]')
-        self.a.Define('Lepton_mass','LeptonIdxs[0] == -1 ? Muon_mass[LeptonIdxs[1]] : Electron_mass[LeptonIdxs[0]]')
+        #For ease, merge some lepton columns that will be useful later (for lepton-type specific variables, use LeptonType to determine if electron or muon)
+        self.a.Define('Lepton_pt','LeptonType == 1 ? Muon_pt[kinMuIdx] : Electron_pt[kinEleIdx]')
+        self.a.Define('Lepton_eta','LeptonType == 1 ? Muon_eta[kinMuIdx] : Electron_eta[kinEleIdx]')
+        self.a.Define('Lepton_phi','LeptonType == 1 ? Muon_phi[kinMuIdx] : Electron_phi[kinEleIdx]')
+        self.a.Define('Lepton_mass','LeptonType == 1 ? Muon_mass[kinMuIdx] : Electron_mass[kinEleIdx]')
 
         return self.a.GetActiveNode()
 
@@ -297,49 +286,56 @@ class XHYbbWW:
 
     def ApplyMassCuts(self):
 	# perform Higgs mass window cut, save cutflow info
-	self.a.Cut('mH_{}_cut'.format('window'),'Higgs_msoftdrop > {0} && Higgs_msoftdrop < {1}'.format(*self.cuts['mh']))
+	self.a.Cut('mH_{}_cut'.format('window'),'Higgs_msoftdrop > {0} && Higgs_msoftdrop < {1}'.format(*self.cuts['JET']['mh']))
 	self.nHiggs = self.getNweighted()
 	self.AddCutflowColumn(self.nHiggs, 'nHiggsMassCut')
 	# Lead W mass window cut, cutflow
-	self.a.Cut('mW_{}_cut'.format('window'),'Wqq_msoftdrop > {0} && Wqq_msoftdrop < {1}'.format(*self.cuts['mw']))
+	self.a.Cut('mW_{}_cut'.format('window'),'Wqq_msoftdrop > {0} && Wqq_msoftdrop < {1}'.format(*self.cuts['JET']['mw']))
 	self.nLeadW = self.getNweighted()
 	self.AddCutflowColumn(self.nLeadW, 'nWqqMassCut')
 	
         return self.a.GetActiveNode()
 
-    def ApplyWTag(self, SRorCR, tagger):
+    def ApplySRorCR(self, SRorCR, tagger): #This is getting frequently updated as I play w/ different definitions
 	'''
 	SRorCR [str] = 'SR' or 'CR', used to generate cutflow information
 	tagger [str] = name of tagger to be used 
-	W tagging criteria:
-		SR: W > 0.8
-		CR: W < 0.8
+	Jet tagging criteria:
+		SR: Wqq > 0.8
+                    Electron_mvaFall17V2noIso_WP80 || Muon_MediumId  
+                    Lepton_miniPFRelIso_all < 0.2
+		CR: Wqq < 0.8
+                    !Electron_mvaFall17V2noIso_WP80 && !Muon_MediumId
+                    Lepton_miniPFRelIso_all > 0.2
 	'''
 	assert(SRorCR=='SR' or SRorCR=='CR')
 	# tagger values for each 
-        Wtag = 0.8
 	if SRorCR == 'SR':
 	    # Signal region
-	    self.a.Cut('Wqq_{}_cut_{}'.format(tagger,SRorCR), 'Wqq_{0}_WqqvsQCD > {1}'.format(tagger,Wtag))
+	    self.a.Cut('Wqq_{}_cut_{}'.format(tagger,SRorCR), 'Wqq_{0}_WqqvsQCD > {1}'.format(tagger,self.cuts['JET']['particleNetMD_WqqvsQCD']))
+            self.a.Cut('lepIsolation_{}'.format(SRorCR),'LeptonType == 0? Electron_miniPFRelIso_all[kinEleIdx] < {} : Muon_miniPFRelIso_all[kinMuIdx] < {}'.format(self.cuts['ELECTRON']['RelIso'],self.cuts['MUON']['RelIso']))
+            self.a.Cut('leptonQuality_{}'.format(SRorCR),'LeptonType == 0? Electron_mvaFall17V2noIso_WP80[kinEleIdx] : Muon_mediumId[kinMuIdx]')
+
 	else:
 	    # Control Region
-	    self.a.Cut('Wqq_{}_cut_{}'.format(tagger,SRorCR), 'Wqq_{0}_WqqvsQCD < {1}'.format(tagger,Wtag))
+	    self.a.Cut('Wqq_{}_cut_{}'.format(tagger,SRorCR), 'Wqq_{0}_WqqvsQCD < {1}'.format(tagger,self.cuts['JET']['particleNetMD_WqqvsQCD']))
+            self.a.Cut('lepIsolation_{}'.format(SRorCR),'LeptonType == 0? Electron_miniPFRelIso_all[kinEleIdx] > {} : Muon_miniPFRelIso_all[kinMuIdx] > {}'.format(self.cuts['ELECTRON']['RelIso'],self.cuts['MUON']['RelIso']))
+            self.a.Cut('leptonQuality_{}'.format(SRorCR),'LeptonType == 0? Electron_mvaFall17V2noIso_WP80[kinEleIdx] == false : Muon_mediumId[kinMuIdx] == false')
 	# save cutflow info
 	self.nWTag = self.getNweighted()
 	self.AddCutflowColumn(self.nWTag, 'nWTag_{}'.format(SRorCR))
 	return self.a.GetActiveNode()
 
-    def ApplyHiggsTag(self, SRorCR, tagger):
+    def ApplyPassFail(self, SRorCR, tagger): #also getting changed pretty frequently for now
 	'''
-	Fail:	H < 0.94
-	Pass: 	H > 0.94
+	Fail:	Hbb < 0.94
+	Pass: 	Hbb > 0.94
 	'''
 	assert(SRorCR=='SR' or SRorCR=='CR')
 	checkpoint = self.a.GetActiveNode()
-	Htag = 0.94
-	FP = {}
+	FP = OrderedDict()
 	# Higgs fail + cutflow info
-	FP['fail_'+SRorCR] = self.a.Cut('HbbTag_fail','Higgs_{0}_HbbvsQCD < {1}'.format(tagger, Htag))
+	FP['fail_'+SRorCR] = self.a.Cut('HbbTag_fail','Higgs_{0}_HbbvsQCD < {1}'.format(tagger, self.cuts['JET']['particleNetMD_HbbvsQCD']))
 	if SRorCR=='SR':
 	    self.nHF_SR = self.getNweighted()
 	    self.AddCutflowColumn(self.nHF_SR, 'higgsF_SR')
@@ -349,7 +345,7 @@ class XHYbbWW:
 
 	# Higgs Pass + cutflow
 	self.a.SetActiveNode(checkpoint)
-	FP['pass_'+SRorCR] = self.a.Cut('HbbTag_pass','Higgs_{0}_HbbvsQCD > {1}'.format(tagger, Htag))
+	FP['pass_'+SRorCR] = self.a.Cut('HbbTag_pass','Higgs_{0}_HbbvsQCD > {1}'.format(tagger, self.cuts['JET']['particleNetMD_HbbvsQCD']))
 	if SRorCR == 'SR':
 	    self.nHP_SR = self.getNweighted()
 	    self.AddCutflowColumn(self.nHP_SR, 'higgsP_SR')
