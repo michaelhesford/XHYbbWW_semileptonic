@@ -6,7 +6,7 @@ export SCRAM_ARCH=slc7_amd64_gcc820
 scramv1 project CMSSW CMSSW_11_1_4
 tar -xzvf XHYbbWW_semileptonic.tgz
 rm XHYbbWW_semileptonic.tgz
-#rm *.root
+rm *.root
 
 mkdir tardir; cp tarball.tgz tardir/; cd tardir/
 tar -xzf tarball.tgz; rm tarball.tgz
@@ -22,7 +22,7 @@ cd TIMBER
 source setup.sh
 cd ../semileptonic
 
-echo python XHYbbWW_studies.py $*
-python XHYbbWW_studies.py $*
+echo python MXvsMY_studies.py $*
+python MXvsMY_studies.py $*
 
-xrdcp -f *studies.root root://cmseos.fnal.gov//store/user/mhesford/XHYbbWW_semileptonic/plots/studies/
+xrdcp -f *MXvsMYstudies.root root://cmseos.fnal.gov//store/user/mhesford/XHYbbWW_semileptonic/plots/MXvsMY_lepVetoSRorCR/
