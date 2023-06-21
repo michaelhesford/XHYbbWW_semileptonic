@@ -3,7 +3,7 @@ import subprocess, os
 from TIMBER.Tools.Common import ExecuteCmd
 
 redirector = 'root://cmseos.fnal.gov/'
-eos_path = '/store/user/mhesford/XHYbbWW_semileptonic/snapshots/'.format(os.getenv('USER'))
+eos_path = '/store/user/mhesford/XHYbbWW_semileptonic/snapshots/'
 
 # gather the names of the snapshot ROOT files
 print("Running eos {} ls {}".format(redirector, eos_path))
