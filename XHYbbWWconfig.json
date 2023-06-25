@@ -25,8 +25,8 @@
     },
     "CUTS" : {
         "JET" : {
-	    "mh":[100,150],
-	    "mw":[60,100],
+	    "mh":[100,145],
+	    "mw":[65,100],
 	    "particleNetMD_HbbvsQCD":0.94,
 	    "particleNetMD_WqqvsQCD":0.8   
         }, 
