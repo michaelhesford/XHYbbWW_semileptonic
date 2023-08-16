@@ -55,8 +55,7 @@ def XHYbbWW_selection(self,variation,nom_hists):
 
     #######################################
 
-    if not nom_hists
-    outFile = ROOT.TFile.Open('XHYbbWWselection_{}_{}.root'.format(self.setname, variation if variation != 'None' else ''),'UPDATE')
+    outFile = ROOT.TFile.Open('XHYbbWWselection_{}_{}{}.root'.format(self.setname, self.year, '_'+variation if variation != 'None' else ''),'UPDATE')
     outFile.cd()
 
     # now we want to plot mX vs mY for QCD, ttbar, and signal
@@ -95,16 +94,14 @@ def XHYbbWW_selection(self,variation,nom_hists):
         for region in nodes.keys():
             self.a.SetActiveNode(nodes[region])
             print('MX vs MY: Evaluating for {}'.format(region))
-            if nom_hists:
-                #just make nominal histograms for each region to store for later use
-                self.a.GetActiveNode().DataFrame.Histo2D(('MXvMY_{}_{}__nominal'.format(region,self.year,'nominal'),'X vs Y Invariant Mass - {} {}'.format(region.split('_')[1],region.split('_')[0]),binsX[0],binsX[1],binsX[2],binsY[0],binsY[1],binsY[2]),'mhwlv','mwlv','weight__nominal') 
-
-            templates = selection.a.MakeTemplateHistos(ROOT.TH2F('MXvMY_{}_{}'.format(region,year), 'X vs Y Invariant Mass - {} {}'.format(region.split('_')[1],region.split('_')[0]), binsX[0],binsX[1],binsX[2],binsY[0],binsY[1],binsY[2]),['mhwlv','mwlv'])
+            templates = HistGroup('MXvMY')
+            templates = selection.a.MakeTemplateHistos(ROOT.TH2F('MXvMY_{}'.format(region), 'X vs Y Invariant Mass - {} {}'.format(region.split('_')[1],region.split('_')[0]), binsX[0],binsX[1],binsX[2],binsY[0],binsY[1],binsY[2]),['mhwlv','mwlv'])
+             
             if 'to' in self.setname:
-                rescale_hists(self,region,binsX,binsY,pre_mcut,templates)
-            adjust_negative_bins(templates)
+                rescale_hists(self,region,binsX,binsY,pre_mcut,templates) #need to a way to do this post combining histos
+            #adjust_negative_bins(templates) #Sholud be saved for after histograms are combined for all years
             templates.Do('Write')
-
+            
     cutflowInfo = OrderedDict([
        ('nDijets',selection.nDijets),
        ('nkinLep',selection.nkinLep),
@@ -164,6 +161,7 @@ if __name__ == '__main__':
     selection = XHYbbWW(filename,1,1)
     selection.ApplyStandardCorrections(snapshot=False)
     selection.ApplyJMECorrections(variation)
+#   selection.ApplyTrigs()
     selection.a.MakeWeightCols(extraNominal='' if selection.a.isData else 'genWeight*%s'%selection.GetXsecScale())
 
     selection.Dijets()
