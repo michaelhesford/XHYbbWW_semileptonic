@@ -15,6 +15,12 @@
 	"ZJetsHT400":145.3,
 	"ZJetsHT600":34.29,
 	"ZJetsHT800":18.57,
+        "WWto4Q":51.03,
+        "WWto1L1Nu2Q":51.65,
+        "ZZto4Q":6.912,
+        "ZZto2L2Q":3.222,
+        "WZto1L1Nu2Q":9.119,
+        "WZto2L2Q":6.331,
         "XHY-4000-2500":0.01,
 	"XHY-3500-1800":0.01,
 	"XHY-3000-1400":0.01,
@@ -23,26 +29,51 @@
 	"XHY-1600-700":0.1,
 	"XHY-1000-500":0.1
     },
+    "TRIGS" : {
+        "16" : {
+            "HADRONIC" : ["HLT_PFHT800","HLT_PFHT900"],
+            "ELECTRON" : ["HLT_Ele27_WPTight_Gsf","HLT_Ele115_CaloIdVT_GsfTrkIdT","HLT_Ele45_CaloIdVT_GsfTrkIdT_PFJet200_PFJet50","HLT_Ele50_CaloIdVT_GsfTrkIdT_PFJet165","HLT_Photon175"],
+            "MUON" : ["HLT_Mu50","HLT_TkMu50","HLT_IsoMu24"]
+        },
+        "17" : {
+            "HADRONIC" : ["HLT_PFHT1050","HLT_AK8PFJet500","HLT_AK8PFHT750_TrimMass50","HLT_AK8PFHT800_TrimMass50","HLT_AK8PFJet400_TrimMass30"],
+            "ELECTRON" : ["HLT_Ele35_WPTight_Gsf","HLT_Ele115_CaloIdVT_GsfTrkIdT","HLT_Ele32_WPTight_Gsf_L1DoubleEG","HLT_Ele50_CaloIdVT_GsfTrkIdT_PFJet165","HLT_Photon200"], 
+            "MUON" : ["HLT_Mu50","HLT_TkMu100","HLT_IsoMu27","HLT_OldMu100"]
+        },
+        "18" : {
+            "HADRONIC" : ["HLT_PFHT1050","HLT_AK8PFJet400_TrimMass30","HLT_AK8PFHT850_TrimMass50"],
+            "ELECTRON" : ["HLT_Ele32_WPTight_Gsf","HLT_Ele115_CaloIdVT_GsfTrkIdT","HLT_Ele50_CaloIdVT_GsfTrkIdT_PFJet165","HLT_Photon200"],
+            "MUON" : ["HLT_Mu50","HLT_TkMu100","HLT_IsoMu24","HLT_OldMu100"]
+        }
+    },
     "CUTS" : {
         "JET" : {
 	    "mh":[100,145],
 	    "mw":[65,100],
 	    "particleNetMD_HbbvsQCD":0.94,
-	    "particleNetMD_WqqvsQCD":0.8   
+	    "particleNetMD_WqqvsQCD":[0.4,0.8],
+            "btag":0.8
         }, 
         "ELECTRON" : {
             "pt":25,
             "eta":2.5, 
-            "RelIso":0.2,
+            "RelIso":[0.2,0.5],
             "mvaFall17V2noIso_barrelIn":0.941,
             "mvaFall17V2noIso_barrelOut":0.899,
-            "mvaFall17V2noIso_encap":0.758
+            "mvaFall17V2noIso_encap":0.758,
+            "mva80":"Electron_mvaFall17V2noIso_WP80",
+            "mva90":"Electron_mvaFall17V2noIso_WP90",
+            "mvaL":"Electron_mvaFall17V2noIso_WPL"
         },
         "MUON" : {
             "pt":25, 
             "eta":2.4, 
-            "RelIso":0.2 
+            "RelIso":[0.2,0.5],
+            "looseId":"Muon_looseId",
+            "mediumId":"Muon_mediumId",
+            "tightId":"Muon_tightId" 
         }
     }
 }
+
 
