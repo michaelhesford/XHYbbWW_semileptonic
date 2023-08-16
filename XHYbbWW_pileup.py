@@ -24,18 +24,7 @@ if __name__ == "__main__":
     #	DataX		MX_XMASS_MY_YMASS
     fullname = '%s_%s'%(setname,era)
 
-    if 'XHY' in setname:
-        signal=True
-        filename = 'raw_nano/Signal/{}_{}.txt'.format(setname,era)
-    else:
-        signal=False
-        if 'QCD' in setname:
-            filename = 'raw_nano/Background/QCD/{}_{}.txt'.format(setname,era)
-        elif 'ttbar' in setname:
-            filename = 'raw_nano/Background/ttbar/{}_{}.txt'.format(setname,era)
-        elif 'Jets' in setname:
-            filename = 'raw_nano/Background/V+Jets/{}_{}.txt'.format(setname,era)
-
+    filename = 'raw_nano/{}_{}.txt'.format(setname,era)
     out = ROOT.TFile.Open('XHYbbWW_pileup_{}.root'.format(fullname), 'RECREATE')
 
     a = analyzer(filename)
