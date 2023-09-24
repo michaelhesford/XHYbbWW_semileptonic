@@ -21,7 +21,7 @@ def loosen_config_cuts(self):
     #values can be adjusted manually here
     self.cuts['JET']['particleNetMD_HbbvsQCD'] = 0.6
     self.cuts['JET']['particleNetMD_WqqvsQCD'] = [0,0.8]
-    self.cuts['JET']['btag'] = 0.6
+    self.cuts['JET']['btag'] = 0.1
     self.cuts['JET']['mh'] = [60,150]
     self.cuts['JET']['mw'] = [50,130]
     self.cuts['ELECTRON']['RelIso'] = [0.5,1]
@@ -37,13 +37,12 @@ def rescale_hists(self,region,binsX,binsY,node,template_hists):
         ratio = stdInts[temp]/looseInt
         hist.Scale(ratio)
 
-def XHYbbWW_selection(self,variation,nom_hists):
+def XHYbbWW_selection(self,variation):
 
     ##### NEW VARIABLES FOR LATER USE #####
 
     #Lorentz 4-vectors
-    self.a.Define('MET_vect','hardware::TLvector(MET_pt,0,MET_phi,0)') #neutrino mass negligable, for now assuming MET_eta = 0 (p_z = 0)
-    self.a.Define('Lepton_vect','hardware::TLvector(Lepton_pt,Lepton_eta,Lepton_phi,Lepton_mass)')
+    self.a.Define('MET_vect','hardware::TLvector(ChsMET_pt,0,ChsMET_phi,0)') #neutrino mass negligable, for now assuming MET_eta = 0 (p_z = 0)
     self.a.Define('Wqq_vect','hardware::TLvector(Wqq_pt_corr,Wqq_eta,Wqq_phi,Wqq_msoftdrop_corr)') #use updated mass/pt after JME corrections
     self.a.Define('Hbb_vect','hardware::TLvector(Higgs_pt_corr,Higgs_eta,Higgs_phi,Higgs_msoftdrop_corr)')
 
@@ -60,28 +59,22 @@ def XHYbbWW_selection(self,variation,nom_hists):
 
     # now we want to plot mX vs mY for QCD, ttbar, and signal
     for t in taggers:
-        pre_mcut=self.a.GetActiveNode()
 
         if 'to' in self.setname:
             loosen_config_cuts(self)
-    
+
+        start=self.a.GetActiveNode()
         self.ApplyMassCuts()
         post_mcut=self.a.GetActiveNode()
-
-        # We use Wqq tagging scores and lepton cuts to divide data into two regions: signal (enriched in signal) and control (enriched in background) - our control region is designed yield plenty of ttbar, which is the dominant background in this search
-        #    - Signal:    Wqq > 0.8, miniRelIso < 0.2, pass lepton medium ID
-        #    - Control:   Wqq < 0.8, miniRelIso < 0.2, pass lepton medium ID, b-tagged AK4 jet exists
-        # We define a pass/fail criteria for the Hbb score within each region 
-        #   - Region 1 (fail):      Hbb < 0.94
-        #   - Region 2 (pass):      Hbb > 0.94
 
         #signal region
         SR=self.ApplySRorCR('SR',t)
         SR_FP=self.ApplyPassFail('SR',t)
-
+       
         #control region - ttbar enriched
         self.a.SetActiveNode(post_mcut)
-        ttCR=self.ApplySRorCR('ttCR',t)
+        ttCR=self.ApplySRorCR('ttCR_HF',t)
+        #ttCR=self.ApplySRorCR('ttCR_dPhi',t)
         ttCR_FP=self.ApplyPassFail('ttCR',t)
 
         nodes=OrderedDict()
@@ -95,25 +88,31 @@ def XHYbbWW_selection(self,variation,nom_hists):
             self.a.SetActiveNode(nodes[region])
             print('MX vs MY: Evaluating for {}'.format(region))
             templates = HistGroup('MXvMY')
-            templates = selection.a.MakeTemplateHistos(ROOT.TH2F('MXvMY_{}'.format(region), 'X vs Y Invariant Mass - {} {}'.format(region.split('_')[1],region.split('_')[0]), binsX[0],binsX[1],binsX[2],binsY[0],binsY[1],binsY[2]),['mhwlv','mwlv'])
+            plot_vars = ['mhwlv','mwlv']
+            templates = selection.a.MakeTemplateHistos(ROOT.TH2F('MXvMY_{}'.format(region), 'X vs Y Invariant Mass - {} {}'.format(region.split('_')[1],region.split('_')[0]), binsX[0],binsX[1],binsX[2],binsY[0],binsY[1],binsY[2]),plot_vars)
              
             if 'to' in self.setname:
-                rescale_hists(self,region,binsX,binsY,pre_mcut,templates) #need to a way to do this post combining histos
+                rescale_hists(self,region,binsX,binsY,pre_mcut,templates) #should find a way to do this post combining histos
             #adjust_negative_bins(templates) #Sholud be saved for after histograms are combined for all years
             templates.Do('Write')
-            
+           
     cutflowInfo = OrderedDict([
-       ('nDijets',selection.nDijets),
-       ('nkinLep',selection.nkinLep),
-       ('nHiggs',selection.nHiggs),
-       ('nWqq',selection.nWqq),
-       ('nWtag_SR',selection.nWtag_SR),
-       ('nlepIso_SR',selection.nlepIso_SR),
-       ('nlepQ_SR',selection.nlepQ_SR),
-       ('nWtag_ttCR',selection.nWtag_ttCR),
-       ('nlepIso_ttCR',selection.nlepIso_ttCR),
-       ('nlepQ_ttCR',selection.nlepQ_ttCR),
-       ('nJetB_ttCR',selection.nJetB_ttCR)
+       ('start',self.nstart),
+       ('nTrigs',self.nTrigs),
+       ('nkinLep',self.nkinLep),
+       ('nDijets',self.nDijets),
+       ('nHiggs',self.nHiggs),
+       ('nWqq',self.nWqq),
+       ('nHtag_SR',self.nHtag_SR),
+       ('nDPhiLH_SR',self.nDPhiLH_SR),
+       ('nWP_SR',self.nWP_SR),
+       ('nWF_SR',self.nWF_SR),
+       ('nHtag_ttCR',self.nHtag_ttCR),
+       #('nDPhiLH_ttCR',self.nDPhiLH_ttCR),
+       ('nJetB_ttCR_HF',self.nJetB_ttCR_HF),
+       #('nJetB_ttCR_dPhi',self.nJetB_ttCR_dPhi),
+       ('nWP_ttCR',self.nWP_ttCR),
+       ('nWF_ttCR',self.nWF_ttCR)
     ])
 
     nLabels = len(cutflowInfo)
@@ -124,10 +123,10 @@ def XHYbbWW_selection(self,variation,nom_hists):
 	hCutflow.AddBinContent(nBin, value)
 	nBin += 1
     hCutflow.Write()
-
+    
     if not selection.a.isData:
-        scale = ROOT.TH1F('scale','xsec*lumi/genEventSumw',1,0,1)
-        scale.SetBinContent(1,selection.GetXsecScale())
+        scale = ROOT.TH1F('scale','genEventSumw',1,0,1)
+        scale.SetBinContent(1,selection.a.genEventSumw)
         scale.Write()
 
     #self.a.PrintNodeTree('NodeTree.pdf',verbose=True)
@@ -145,12 +144,16 @@ if __name__ == '__main__':
     parser.add_argument('-v', type=str, dest='variation',
                         action='store', default='None',
                         help='JES_up, JES_down, JMR_up,...')
-    parser.add_argument('--make_nominal_hists',action='store_true',help='if used, just make nominal histograms')
+    parser.add_argument('-j', type=int, dest='ijob',required=False,
+        action='store', default=1, help='current job')
+    parser.add_argument('-n', type=int, dest='njobs',required=False,
+        action='store', default=1, help='number of jobs')
     args = parser.parse_args()
-    nom_hists = args.make_nominal_hists
     setname=args.setname
     year=args.year
-    variation=args.variation if not nom_hists else 'None'
+    ijob=args.ijob
+    njobs=args.njobs
+    variation = args.variation
 
     if 'to' in setname:
         #using a looser snapshot to increase statistics for VV samples
@@ -158,14 +161,16 @@ if __name__ == '__main__':
     else:
         filename='snapshots/{}_{}_snapshot.txt'.format(setname,year)
 
-    selection = XHYbbWW(filename,1,1)
-    selection.ApplyStandardCorrections(snapshot=False)
-    selection.ApplyJMECorrections(variation)
-#   selection.ApplyTrigs()
-    selection.a.MakeWeightCols(extraNominal='' if selection.a.isData else 'genWeight*%s'%selection.GetXsecScale())
+    selection = XHYbbWW(filename,ijob,njobs)
+    selection.nstart = selection.getNweighted()
+    selection.AddCutflowColumn(selection.nstart,'nstart')
 
+    selection.ApplyTrigs()
+    selection.ApplyJMECorrections(variation)
     selection.Dijets()
     selection.KinematicLepton()
+    selection.ApplyStandardCorrections(snapshot=False)
+    selection.a.MakeWeightCols(extraNominal='' if selection.a.isData else 'genWeight*%s'%selection.GetXsecScale())
 
-    XHYbbWW_selection(selection,variation,nom_hists)
+    XHYbbWW_selection(selection,variation)
    
