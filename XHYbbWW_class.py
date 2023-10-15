@@ -108,6 +108,7 @@ class XHYbbWW:
 
         #events pass jet preselection
         self.a.Define('isJetPre','isJetPreselected(nFatJet,FatJet_pt,FatJet_eta,FatJet_msoftdrop,nJet,Jet_pt,Jet_eta,{})'.format(ttCR))    
+        self.a.Cut('isJetPreselected','isJetPre')
         self.JETPRE = self.getNweighted()
         self.AddCutflowColumn(self.JETPRE,'JETPRE') 
         
