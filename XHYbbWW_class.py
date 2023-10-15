@@ -82,7 +82,7 @@ class XHYbbWW:
         ttCR = 'true' if make_ttCR else 'false' #C++ booleans represented with lowercase
         self.NSTART = self.getNweighted()
         self.AddCutflowColumn(self.NSTART,'NSTART')
-
+        
         flags = [
             'Flag_goodVertices',
             'Flag_globalSuperTightHalo2016Filter',
@@ -99,7 +99,7 @@ class XHYbbWW:
         self.a.Cut('flags', MET_filters)
         self.NFLAGS = self.getNweighted()
         self.AddCutflowColumn(self.NFLAGS, "NFLAGS")
-
+        
         #at least one lepton passing pre-selection criteria
         self.a.Define('isLeptonPre','isLeptonPreselected(nElectron, Electron_pt, Electron_eta, Electron_miniPFRelIso_all, nMuon, Muon_pt, Muon_eta, Muon_miniPFRelIso_all)')
         self.a.Cut('isLeptonPreselected','isLeptonPre')
@@ -110,12 +110,15 @@ class XHYbbWW:
         self.a.Define('isJetPre','isJetPreselected(nFatJet,FatJet_pt,FatJet_eta,FatJet_msoftdrop,nJet,Jet_pt,Jet_eta,{})'.format(ttCR))    
         self.JETPRE = self.getNweighted()
         self.AddCutflowColumn(self.JETPRE,'JETPRE') 
-
+        
+        #Make subcollection of loose b-tagged AK4's - just using to avoid a segmentation violation in the snapshot function
+        #self.a.SubCollection('BJet','Jet','Jet_btagDeepFlavB > {}'.format(self.cuts['JET']['btagL_{}'.format(self.year)]))
+        
         #MET cut
         self.a.Cut('MET_cut','MET_pt > 25')
         self.METPT = self.getNweighted()
         self.AddCutflowColumn(self.METPT, "METPT")
- 
+        
         return self.a.GetActiveNode()
 
     def ApplyStandardCorrections(self, snapshot=False):
@@ -125,17 +128,17 @@ class XHYbbWW:
                 # NOTE: LumiFilter requires the year as an integer 
                 lumiFilter = ModuleWorker('LumiFilter','TIMBER/Framework/include/LumiFilter.h',[int(self.year) if 'APV' not in self.year else 16])    # defaults to perform "eval" method 
                 self.a.Cut('lumiFilter',lumiFilter.GetCall(evalArgs={"lumi":"luminosityBlock"}))	       # replace lumi with luminosityBlock
-                if self.year == '18':
-                    HEM_worker = ModuleWorker('HEM_drop','TIMBER/Framework/include/HEM_drop.h',[self.setname if 'Muon' not in self.setname else self.setname[10:]])
-                    self.a.Cut('HEM','%s[0] > 0'%(HEM_worker.GetCall(evalArgs={"FatJet_eta":"FatJet_eta","FatJet_phi":"FatJet_phi"})))
+                #if self.year == '18':
+                    #HEM_worker = ModuleWorker('HEM_drop','TIMBER/Framework/include/HEM_drop.h',[self.setname if 'Muon' not in self.setname else self.setname[10:]])
+                    #self.a.Cut('HEM','%s[0] > 0'%(HEM_worker.GetCall(evalArgs={"FatJet_eta":"FatJet_eta","FatJet_phi":"FatJet_phi"})))
             else:
                 self.a = ApplyPU(self.a, 'XHYbbWWpileup.root', '20{}'.format(self.year), ULflag=True, histname='{}_{}'.format(self.setname,self.year))
                 self.a.AddCorrection(Correction('Pdfweight','TIMBER/Framework/include/PDFweight_uncert.h',[self.a.lhaid],corrtype='uncert'))
                 if self.year == '16' or self.year == '17' or 'APV' in self.year:
                     L1PreFiringWeight = Correction("L1PreFiringWeight","TIMBER/Framework/TopPhi_modules/BranchCorrection.cc",constructor=[],mainFunc='evalWeight',corrtype='weight',columnList=['L1PreFiringWeight_Nom','L1PreFiringWeight_Up','L1PreFiringWeight_Dn'])
                     self.a.AddCorrection(L1PreFiringWeight, evalArgs={'val':'L1PreFiringWeight_Nom','valUp':'L1PreFiringWeight_Up','valDown':'L1PreFiringWeight_Dn'})
-                elif self.year == '18':
-                    self.a.AddCorrection(Correction('HEM_drop','TIMBER/Framework/include/HEM_drop.h',[self.setname],corrtype='corr'))
+                #elif self.year == '18':
+                    #self.a.AddCorrection(Correction('HEM_drop','TIMBER/Framework/include/HEM_drop.h',[self.setname],corrtype='corr'))
             self.a = AutoJME.AutoJME(self.a, 'FatJet', '20{}'.format(self.year), self.setname if 'Muon' not in self.setname else self.setname[10:])
         # now for selection
         else:
@@ -149,7 +152,8 @@ class XHYbbWW:
                         evalArgs={
                             'jet0':'hardware::TLvector(Wqq_pt_corr,Wqq_eta,Wqq_phi,Wqq_msoftdrop_corr)',
                             'jet1':'hardware::TLvector(Higgs_pt_corr,Higgs_eta,Higgs_phi,Higgs_msoftdrop_corr)',
-                            'GenPart_vect':'GenParticle_vect'
+                            'GenPart_vect':'GenParticle_vect',
+                            'scale':'1'
                         }
                     )
                 if self.year == '16' or self.year == '17' or 'APV' in self.year:
@@ -165,8 +169,10 @@ class XHYbbWW:
             self.a.AddCorrection(
                 Correction('TptReweight','TIMBER/Framework/include/TopPt_weight.h',corrtype='weight'),
                 evalArgs={
-                    'jet0':'hardware::TLvector(Wqq_pt_corr,Wqq_eta,Wqq_phi,Wqq_msoftdrop_corr)',
-                    'jet1':'hardware::TLvector(Higgs_pt_corr,Higgs_eta,Higgs_phi,Higgs_msoftdrop_corr)',
+                    #'jet0':'hardware::TLvector(Wqq_pt_corr,Wqq_eta,Wqq_phi,Wqq_msoftdrop_corr)',
+                    #'jet1':'hardware::TLvector(Higgs_pt_corr,Higgs_eta,Higgs_phi,Higgs_msoftdrop_corr)',
+                    'jet0':'hardware::TLvector(bJet_pt,bJet_eta,bJet_phi,bJet_mass)',
+                    'jet1':'hardware::TLvector(bqqJet_pt,bqqJet_eta,bqqJet_phi,bqqJet_msoftdrop)',
                     'GenPart_vect':'GenParticle_vect'
                 }
             )
@@ -186,7 +192,7 @@ class XHYbbWW:
             # IS IT, AMITAV? IS IT???
 	    # ----------------------------------------------------------------------------------------------------------------------
 	    pt_calibs, mass_calibs = JMEvariationStr('Higgs',variation)
-	    self.a.Define('FatJet_pt_corr','hardware::MultiHadamardProduct(FatJet_pt,{})'.format(pt_calibs))
+	    self.a.Define('FatJet_pt_corr','hardware::MultiHadamardProduct(FatJet_pt,%s)'%pt_calibs)
 	    self.a.Define('FatJet_msoftdrop_corr','hardware::MultiHadamardProduct(FatJet_msoftdrop,{})'.format(mass_calibs))
 	else:
 	    self.a.Define('FatJet_pt_corr','hardware::MultiHadamardProduct(FatJet_pt,{FatJet_JES_nom})')
@@ -197,44 +203,45 @@ class XHYbbWW:
     def ApplyTrigs(self):
         #For now, just apply triggers straight up
         #Eventually, once trigger efficiencies in data measured, can just apply them as a weight correction to MC
-        all_trigs = self.trigs[int(self.year) if 'APV' not in self.year else 16]
+        all_trigs = self.trigs[self.year if 'APV' not in self.year else '16']
         trigs = []
         for group in ['HADRONIC','ELECTRON','MUON']:
-            trigs.append(trig.encode('ascii','ignore') for trig in all_trigs[group]) #something about unicode	
+            for trig in all_trigs[group]:
+                trigs.append(trig.encode('ascii','ignore')) #something about unicode	
+        print('Trigger list: {}'.format(trigs))
         self.a.Cut('trigger',self.a.GetTriggerString(trigs))
+        self.nTrigs = self.getNweighted()
+        self.AddCutflowColumn(self.nTrigs, "nTrigs")
 	return self.a.GetActiveNode()
 
     def Snapshot(self, node=None):
         startNode = self.a.GetActiveNode()
         if node == None:
             node = self.a.GetActiveNode()
-        ''' #OLD         
+        
+        #OLD         
         columns = [       
-            'nJet','Jet_btagDeepFlavB','nFatJet','FatJet_eta',
-            'FatJet_msoftdrop','FatJet_pt','FatJet_phi','FatJet_JES_nom','FatJet_deepTagMD_HbbvsQCD',
-            'FatJet_deepTagMD_ZHbbvsQCD', 'FatJet_deepTagMD_WvsQCD', 'FatJet_deepTag_TvsQCD',
-            'FatJet_particleNet_HbbvsQCD','FatJet_particleNet_TvsQCD', 'FatJet_particleNet_QCD',
-            'FatJet_particleNet_WvsQCD','FatJet_particleNetMD*', 'FatJet_rawFactor', 'FatJet_tau*',
-            'FatJet_jetId','nMuon','Muon_*','nElectron','Electron_*','HLT_Mu50','HLT_TkMu*','HLT_IsoMu*','HLT_OldMu100',
-            'MET_*','HLT_*MET*','HLT_Photon*','HLT_Ele*','HLT_PFHT*', 'HLT_PFJet*', 'HLT_AK8*','genWeight',
-            'event','eventWeight','luminosityBlock','run'
-        ]
-        '''
-        
-        columns = [ 
-            'nElectron','Electron_pt','Electron_eta','Electron_phi','Electron_mass','Electron_miniPFRelIso_all','Electron_mvaFall17V2noIso_WP80',
-            'nMuon','Muon_pt','Muon_eta','Muon_phi','Muon_mass','Muon_miniPFRelIso_all','Muon_mediumId',
-            'nJet','Jet_pt','Jet_eta','Jet_phi','Jet_mass','Jet_btagDeepB','Jet_btagDeepFlavB',
-            'nFatJet','FatJet_pt','FatJet_eta','FatJet_phi','FatJet_msoftdrop','FatJet_JES_nom',
-            'FatJet_particleNetMD_Xbb','FatJet_particleNetMD_Xqq','FatJet_particleNetMD_Xcc','FatJet_particleNetMD_QCD',
+            'nJet','Jet_btagDeepFlavB','Jet_pt','Jet_eta','Jet_phi','Jet_mass','Jet_btagDeepB','Jet_jetId',
+            'nFatJet','FatJet_eta','FatJet_msoftdrop','FatJet_pt','FatJet_phi','FatJet_JES_nom','FatJet_particleNetMD*', 'FatJet_rawFactor',
+            'FatJet_jetId','nCorrT1METJet','CorrT1METJet_*','nMuon','Muon_*','nElectron','Electron_*','HLT_*',
             'RawMET_phi','RawMET_pt','RawMET_sumEt','ChsMET_phi','ChsMET_pt','ChsMET_sumEt','MET_phi','MET_pt','MET_sumEt',
-            'HLT_*','genWeight','event','eventWeight','luminosityBlock','run'
+            'genWeight','event','eventWeight','luminosityBlock','run','NSTART','NFLAGS','LEPPRE','JETPRE','METPT'
         ]
-        
-        #'NSTART','NFLAGS','LEPPRE','JETPRE','METPT'
+        columns.extend(['nGenJet','nSoftActivityJet','nSubJet'])
+        '''
+        columns = [
+            'nElectron','Electron_*','nMuon','Muon_*','nCorrT1METJet','CorrT1METJet_*',
+            'nJet','nJet','Jet_btagDeepFlavB','Jet_pt','Jet_eta','Jet_phi','Jet_mass','Jet_btagDeepB','Jet_jetId',
+            'nFatJet','FatJet_pt','FatJet_eta','FatJet_phi','FatJet_msoftdrop','FatJet_jetId','FatJet_JES_nom','FatJet_particleNetMD*',
+            'HLT_*','RawMET_phi','RawMET_pt','RawMET_sumEt','ChsMET_phi','ChsMET_pt','ChsMET_sumEt','MET_phi','MET_pt','MET_sumEt',
+            'genWeight','event','eventWeight','luminosityBlock','run','NSTART','NFLAGS','LEPPRE','JETPRE','METPT'
+        ]
+
+        columns.extend(['nSoftActivityJet','nSubJet']) #stupid columns I have to add to keep this stupid snapshot function happy
+        ''' 
            
         if not self.a.isData:
-            columns.extend(['nGenPart','GenPart_*','GenMET_phi','GenMET_pt','genWeight']) 
+            columns.extend(['nGenPart','GenPart_*','GenMET_*','genWeight']) 
             columns.extend(['FatJet_JES_up','FatJet_JES_down',
                             'FatJet_JER_nom','FatJet_JER_up','FatJet_JER_down',
                             'FatJet_JMS_nom','FatJet_JMS_up','FatJet_JMS_down',
@@ -245,7 +252,7 @@ class XHYbbWW:
                 columns.extend(['L1PreFiringWeight__nom','L1PreFiringWeight__up','L1PreFiringWeight__down'])    # these are the weight columns created by the BranchCorrection module
             elif self.year == '18':
                 columns.append('HEM_drop__nom')
-
+        
         # get ready to send out snapshot
         self.a.SetActiveNode(node)
         self.a.Snapshot(columns, 'XHYbbWWsnapshot_{}_{}_{}_{}.root'.format(self.setname,self.year,self.ijob,self.njobs),'Events', openOption='RECREATE',saveRunChain=True)
@@ -254,7 +261,7 @@ class XHYbbWW:
     def Dijets(self):
 
         #Pick highest pt back to back fat jets
-        self.a.Define('DijetIdxs','PickDijets(FatJet_eta,FatJet_phi,FatJet_msoftdrop)')
+        self.a.Define('DijetIdxs','PickDijets(FatJet_pt,FatJet_eta,FatJet_phi,FatJet_msoftdrop)')
         self.a.Cut('Dijets_exist','DijetIdxs[0] != -1 && DijetIdxs[1] != -1')
 
         self.nDijets = self.getNweighted()
@@ -280,21 +287,6 @@ class XHYbbWW:
         self.a.Define('WqqIdx','Dijet_particleNetMD_WqqvsQCD[0] > Dijet_particleNetMD_WqqvsQCD[1] ? 0 : 1')
         self.a.Define('HiggsIdx','WqqIdx == 0 ? 1 : 0')
 
-        '''
-        self.a.Define('Lepton_vect','hardware::TLvector(Lepton_pt,Lepton_eta,Lepton_phi,Lepton_mass)')
-        self.a.Define('Lead_vect','hardware::TLvector(Dijet_pt[0],Dijet_eta[0],Dijet_phi[0],Dijet_msoftdrop[0])')
-        self.a.Define('Sublead_vect','hardware::TLvector(Dijet_pt[1],Dijet_eta[1],Dijet_phi[1],Dijet_msoftdrop[1])')
-
-        #mark jet closese to lepton in R as the W, other is the Higgs
-        self.a.Define('DeltaPhi_Lepton_Lead','hardware::DeltaPhi(Lepton_phi,Dijet_phi[0])')
-        self.a.Define('DeltaPhi_Lepton_Sublead','hardware::DeltaPhi(Lepton_phi,Dijet_phi[1])')
-        self.a.Define('DeltaR_Lepton_Lead','hardware::DeltaR(Lepton_vect,Lead_vect)')
-        self.a.Define('DeltaR_Lepton_Sublead','hardware::DeltaR(Lepton_vect,Sublead_vect)')
-
-        self.a.Define('WqqIdx','DeltaR_Lepton_Lead < DeltaR_Lepton_Sublead ? 0 : 1')
-        self.a.Define('HiggsIdx','WqqIdx == 0 ? 1 : 0')
-        '''
-
         self.a.ObjectFromCollection('Higgs','Dijet','HiggsIdx')
         self.a.ObjectFromCollection('Wqq','Dijet','WqqIdx')
 
@@ -307,8 +299,7 @@ class XHYbbWW:
         self.a.Cut('kinLepton_cut','kinEleIdx != -1 || kinMuIdx != -1') #at least one good lepton
         self.a.Define('LeptonType','LeptonIdx(kinEleIdx,kinMuIdx,Electron_pt,Muon_pt)') #picks higher pt signal lepton - output = 0 (lepton is electron) or 1 (lepton is muon)
 
-        #self.a.Cut('lepIsolation','LeptonType == 0? Electron_miniPFRelIso_all[kinEleIdx] < {} : Muon_miniPFRelIso_all[kinMuIdx] < {}'.format(self.cuts['ELECTRON']['RelIso'],self.cuts['MUON']['RelIso'])) #Right now, save this for signal/control region definitions
-        #self.a.Cut('leptonQuality','LeptonType == 0? Electron_mvaFall17V2noIso_WP80[kinEleIdx] : Muon_mediumId[kinMuIdx]') #"naively" using the standard WP80 boolean for now; eventually must examine more closely efficiency of lepton cuts and find optimal cut value(s) for Electron_mvaFall17V2noIso discriminant
+        self.a.Cut('leptonQuality','LeptonType == 0? Electron_mvaFall17V2noIso_WP80[kinEleIdx] : Muon_mediumId[kinMuIdx]')
 
         self.nkinLep = self.getNweighted()
         self.AddCutflowColumn(self.nkinLep,'nkinLep')
@@ -318,6 +309,7 @@ class XHYbbWW:
         self.a.Define('Lepton_eta','LeptonType == 1 ? Muon_eta[kinMuIdx] : Electron_eta[kinEleIdx]')
         self.a.Define('Lepton_phi','LeptonType == 1 ? Muon_phi[kinMuIdx] : Electron_phi[kinEleIdx]')
         self.a.Define('Lepton_mass','LeptonType == 1 ? Muon_mass[kinMuIdx] : Electron_mass[kinEleIdx]')
+        self.a.Define('Lepton_vect','hardware::TLvector(Lepton_pt,Lepton_eta,Lepton_phi,Lepton_mass)')
 
         return self.a.GetActiveNode()
 
@@ -363,21 +355,18 @@ class XHYbbWW:
 	SRorCR [str] = 'SR' or 'CR', used to generate cutflow information
 	tagger [str] = name of tagger to be used 
         
+        Work with two control regions to measure ttbar - one defined by Hbb tag fail and other defined by inverting delta phi cut between lepton/Higgs
 	Selection criteria:
 		SR: Hbb > 0.94
-                    Electron_mvaFall17V2noIso_WP80 || Muon_MediumId  
-                    Lepton_miniPFRelIso_all < 0.2
-		CR: 0.4 < Wqq < 0.8
-                    Electron_mvaFall17V2noIso_WP80 || Muon_MediumId #want good quality leptons even in conrol region
-                    0.2 < Lepton_miniPFRelIso_all < 0.5
-                ttCR: Hbb < 0.94 
-                    Electron_mvaFall17V2noIso_WP80 || Muon_MediumId #keep normal lepton cuts
-                    Lepton_miniPFRelIso_all < 0.2
-                    b-tagged AK4 jet exists w/ btag_DeepFlavB > 0.8, pt > 25, |eta| < 2.4
+                    |deltaPhi| lepton,Higgs > 0.5
+		ttCR_HF: Hbb < 0.94
+                    b-tagged AK4 jet exists w/ pt > 25, |eta| < 2.4, |deltaR| lepton/jet < 2, pass medium WP of deepJet algorithm
+                ttCR_dPhi: |deltaPhi| lepton/Higgs < 0.5
+                    b-tagged AK4 jet exists w/ pt > 25, |eta| < 2.4, |deltaR| lepton/jet < 2, pass medium WP of deepJet algorithm
                 Note: We want the control region to be void of signal/high in background, but we don't want it to be so different from the signal region. 
                       It should be similar enough to the signal region, but statistically disjunct.
 	'''
-	assert(SRorCR=='SR' or SRorCR=='CR' or SRorCR=='ttCR')
+	assert(SRorCR=='SR' or SRorCR=='ttCR_HF' or SRorCR=='ttCR_dPhi')
 	# tagger values for each 
 	if SRorCR == 'SR':
 	    # Signal region 
@@ -385,55 +374,73 @@ class XHYbbWW:
             self.nHtag_SR = self.getNweighted()
             self.AddCutflowColumn(self.nHtag_SR, 'nHtag_SR')
             
-            self.a.Cut('lepIsolation_{}'.format(SRorCR),'LeptonType == 0? Electron_miniPFRelIso_all[kinEleIdx] < {} : Muon_miniPFRelIso_all[kinMuIdx] < {}'.format(self.cuts['ELECTRON']['RelIso'][0],self.cuts['MUON']['RelIso'][0]))
-            self.nlepIso_SR = self.getNweighted()
-            self.AddCutflowColumn(self.nlepIso_SR, 'nlepIso_SR')
-
-            self.a.Cut('leptonQuality_{}'.format(SRorCR),'LeptonType == 0? {}[kinEleIdx] : {}[kinMuIdx]'.format(self.cuts['ELECTRON']['mva80'],self.cuts['MUON']['mediumId']))
-            self.nlepQ_SR = self.getNweighted()
-            self.AddCutflowColumn(self.nlepQ_SR, 'nlepQ_SR')
-
-	elif SRorCR == 'CR':
-	    # Control Region
-	    self.a.Cut('Wqq_{}_cut_{}'.format(tagger,SRorCR), 'Wqq_{0}_WqqvsQCD > {1} && Wqq_{0}_WqqvsQCD < {2}'.format(tagger,self.cuts['JET']['particleNetMD_WqqvsQCD'][0],self.cuts['JET']['particleNetMD_WqqvsQCD'][1]))
-            self.nWtag_CR = self.getNweighted()
-            self.AddCutflowColumn(self.nWtag_CR, 'nWtag_CR')
-
-            self.a.Cut('lepIsolation_{}'.format(SRorCR),'LeptonType == 0? Electron_miniPFRelIso_all[kinEleIdx] > {} && Electron_miniPFRelIso_all[kinEleIdx] < {} : Muon_miniPFRelIso_all[kinMuIdx] > {} && Muon_miniPFRelIso_all[kinMuIdx] < {}'.format(self.cuts['ELECTRON']['RelIso'][0], self.cuts['ELECTRON']['RelIso'][1], self.cuts['MUON']['RelIso'][0], self.cuts['MUON']['RelIso'][1]))
-            self.nlepIso_CR = self.getNweighted()
-            self.AddCutflowColumn(self.nlepIso_CR, 'nlepIso_CR')
-
-            self.a.Cut('leptonQuality_{}'.format(SRorCR),'LeptonType == 0? {}[kinEleIdx] : {}[kinMuIdx]'.format(self.cuts['ELECTRON']['mva80'],self.cuts['MUON']['mediumId']))
-            self.nlepQ_CR = self.getNweighted()
-            self.AddCutflowColumn(self.nlepQ_CR, 'nlepQ_CR')       
+            self.a.Cut('DeltaPhi_Lepton_Higgs_{}'.format(SRorCR),'abs(hardware::DeltaPhi(Lepton_phi,Higgs_phi)) > 0.5')
+            self.nDPhiLH_SR = self.getNweighted()
+            self.AddCutflowColumn(self.nDPhiLH_SR,'nDPhiLH_SR')
  
-        else:
-            #ttbar control region
-            self.a.Cut('Hbb_{}_cut_ttCR'.format(tagger), 'Higgs_{}_HbbvsQCD < {}'.format(tagger,self.cuts['JET']['particleNetMD_HbbvsQCD']))
+        elif SRorCR == 'ttCR_HF':
+            #ttbar control region w/ Hbb tag fail
+            self.a.Cut('Hbb_{}_cut_{}'.format(tagger,SRorCR), 'Higgs_{}_HbbvsQCD < {}'.format(tagger,self.cuts['JET']['particleNetMD_HbbvsQCD']))
             self.nHtag_ttCR = self.getNweighted()
             self.AddCutflowColumn(self.nHtag_ttCR, 'nHtag_ttCR')
+
+            #self.a.Define('DeltaR_Jet_Lepton','hardware::DeltaR(Jet_vect,Lepton_vect)') #Can't talke delta R of single vector w/ list of vectors
+            #self.a.SubCollection('JetB','Jet','Jet_btagDeepFlavB > {}'.format(self.cuts['JET']['btagM_{}'.format(self.year)]))
+            self.a.Define('Jet_vect','hardware::TLvector(Jet_pt,Jet_eta,Jet_phi,Jet_mass)')
+            self.a.Define('btag_idx','PickJetB(Jet_vect,Lepton_vect,Jet_btagDeepFlavB,{})'.format(self.cuts['JET']['btagM_{}'.format(self.year)]))
+            self.a.Cut('nbtaggedJet_HF','btag_idx != -1')
+            self.nJetB_ttCR_HF = self.getNweighted()
+            self.AddCutflowColumn(self.nJetB_ttCR_HF, 'nJetB_ttCR_HF')
             
-            self.a.Cut('lepIsolation_ttCR','LeptonType == 0? Electron_miniPFRelIso_all[kinEleIdx] < {} : Muon_miniPFRelIso_all[kinMuIdx] < {}'.format(self.cuts['ELECTRON']['RelIso'][0],self.cuts['MUON']['RelIso'][0]))
-            self.nlepIso_ttCR = self.getNweighted()
-            self.AddCutflowColumn(self.nlepIso_ttCR, 'nlepIso_ttCR')
+        else: #SRorCR == 'ttCR_dPhi'
+            self.a.Cut('DeltaPhi_Lepton_Higgs_{}'.format(SRorCR),'abs(hardware::DeltaPhi(Lepton_phi,Higgs_phi)) < 0.5')
+            self.nDPhiLH_ttCR = self.getNweighted()
+            self.AddCutflowColumn(self.nDPhiLH_ttCR,'nDPhiLH_ttCR')        
 
-            self.a.Cut('leptonQuality_ttCR'.format(SRorCR),'LeptonType == 0? {}[kinEleIdx] : {}[kinMuIdx]'.format(self.cuts['ELECTRON']['mva80'],self.cuts['MUON']['mediumId']))
-            self.nlepQ_ttCR = self.getNweighted()
-            self.AddCutflowColumn(self.nlepQ_ttCR, 'nlepQ_ttCR')
-
-            #self.a.Define('Jet_btag','Jet_pt > 25 && abs(Jet_eta) < 2.4 && Jet_btagDeepFlavB > {}'.format(self.cuts['JET']['btag_{}'.format(self.year)]))
-            self.a.Define('Jet_btag','Jet_btagDeepFlavB > {}'.format(self.cuts['JET']['btag_{}'.format(self.year)]))
-            self.a.Cut('nbtaggedJet','Jet_btag.size() > 0')
-            self.nJetB_ttCR = self.getNweighted()
-            self.AddCutflowColumn(self.nJetB_ttCR, 'nJetB_ttCR')
+            self.a.Define('Jet_vect','hardware::TLvector(Jet_pt,Jet_eta,Jet_phi,Jet_mass)')
+            self.a.Define('btag_idx','PickJetB(Jet_vect,Lepton_vect,Jet_btagDeepFlavB,{})'.format(self.cuts['JET']['btagM_{}'.format(self.year)]))
+            self.a.Cut('nbtaggedJet_dPhi','btag_idx != -1')
+            self.nJetB_ttCR_dPhi = self.getNweighted()
+            self.AddCutflowColumn(self.nJetB_ttCR_dPhi, 'nJetB_ttCR_dPhi')
 
         return self.a.GetActiveNode()
-
+    
     def ApplyPassFail(self, SRorCR, tagger):
-	'''
+        
+        assert(SRorCR=='SR' or SRorCR=='ttCR')
+        checkpoint = self.a.GetActiveNode()
+        FP = OrderedDict()
+        if SRorCR == 'SR':
+            # Wqq fail + cutflow info
+            FP['fail_'+SRorCR] = self.a.Cut('WqqTag_fail','Wqq_{0}_WqqvsQCD < {1}'.format(tagger, self.cuts['JET']['particleNetMD_WqqvsQCD']))
+            self.nWF_SR = self.getNweighted()
+            self.AddCutflowColumn(self.nWF_SR, 'WqqF_SR')
+
+            # Wqq pass + cutflow
+            self.a.SetActiveNode(checkpoint)
+            FP['pass_'+SRorCR] = self.a.Cut('WqqTag_pass','Wqq_{0}_WqqvsQCD > {1}'.format(tagger, self.cuts['JET']['particleNetMD_WqqvsQCD']))
+            self.nWP_SR = self.getNweighted()
+            self.AddCutflowColumn(self.nWP_SR, 'WqqP_SR')
+        elif SRorCR == 'ttCR':
+            FP['fail_'+SRorCR] = self.a.Cut('WqqTag_fail','Wqq_{0}_WqqvsQCD < {1}'.format(tagger, self.cuts['JET']['particleNetMD_WqqvsQCD']))
+            self.nWF_ttCR = self.getNweighted()
+            self.AddCutflowColumn(self.nWF_ttCR, 'WqqF_ttCR')
+
+            self.a.SetActiveNode(checkpoint)
+            FP['pass_'+SRorCR] = self.a.Cut('WqqTag_pass','Wqq_{0}_WqqvsQCD > {1}'.format(tagger, self.cuts['JET']['particleNetMD_WqqvsQCD']))
+            self.nWP_ttCR = self.getNweighted()
+            self.AddCutflowColumn(self.nWP_ttCR, 'WqqP_ttCR')
+        
+        # reset state, return dict
+        self.a.SetActiveNode(checkpoint)
+        return FP
+
+    '''
+    def ApplyPassFail(self, SRorCR, tagger):
+	
 	Fail:	Wqq < 0.8
 	Pass: 	Wqq > 0.8
-	'''
+	
 	assert(SRorCR=='SR' or SRorCR=='CR' or SRorCR=='ttCR')
 	checkpoint = self.a.GetActiveNode()
 	FP = OrderedDict()
@@ -459,7 +466,7 @@ class XHYbbWW:
 	# reset state, return dict
 	self.a.SetActiveNode(checkpoint)
 	return FP
-    
+    '''
     '''
     def ApplySRorCR(self, SRorCR, tagger): #This is getting frequently updated as I play w/ different definitions
 	
@@ -564,6 +571,27 @@ class XHYbbWW:
 	self.a.SetActiveNode(checkpoint)
 	return FP
     '''
+
+    def make_ttCR(self):
+        #Built from ttCR snapshots - fuction to create ttbar control region for use in fitting ttbar to data
+        #Presumably at this point we've already picked a signal-like lepton, so all that's left is to select jets 
+        #But first, impose lepton id
+        self.a.Cut('leptonQuality_ttCR','LeptonType == 0? {}[kinEleIdx] : {}[kinMuIdx]'.format(self.cuts['ELECTRON']['mva80'],self.cuts['MUON']['mediumId']))        
+        self.a.Define('ttbar_jetIdxs','PickJets_ttCR(FatJet_pt,FatJet_eta,FatJet_phi,Jet_pt,Jet_eta,Jet_phi,Jet_btagDeepFlavB,{},Lepton_phi)'.format(self.cuts['JET']['btag_{}'.format(self.year)])) #use medium WP of deepJet algorithm
+
+        self.a.Cut('ttCRJets_exist','ttbar_jetIdxs[0] != -1 && ttbar_jetIdxs[1] != -1')
+        self.nJetsTTCR = self.getNweighted()
+        self.AddCutflowColumn(self.nJetsTTCR, "nJetsTTCR")
+
+        self.a.ObjectFromCollection('bqqJet','FatJet','tbar_jetIdxs[0]')
+        self.a.ObjectFromCollection('bJet','Jet','tbar_jetIdxs[1]')
+
+        #define Lorentz 4-vectors for both jets
+        self.a.Define('bqqJet_vect','hardware::TLvector(bqqJet_pt_corr,bqqJet_eta,bqqJet_phi,bqqJet_msoftdrop_corr)')
+        self.a.Define('bJet_vect','hardware::TLvector(bJet_pt,bJet_eta,bJet_phi,bJet_mass)')
+
+        self.a.Define('mT','hardware::InvariantMass({Lepton_vect,MET_vect,bJet_vect})')
+        self.a.Define('mTT','hardware::InvariantMass({Lepton_vect,MET_vect,bJet_vect,bqqJet_vect})')
 
     def get_standard_int(self,region,binsX,binsY,node):
         #The idea behind this function is to perform all the "standard cuts" for a given region (pass/fail for SR, CR, or ttCR) and produce a histogram
