@@ -1,8 +1,4 @@
-<<<<<<< Updated upstream
-rom TIMBER.Tools.Common import ExecuteCmd
-=======
 from TIMBER.Tools.Common import ExecuteCmd
->>>>>>> Stashed changes
 import sys
 
 # dictionary containing the year as keys, with each value being another dictionary of {sampleName: DAS location}
@@ -35,7 +31,9 @@ das = {
         'ttbar-allhad': '/TTToHadronic_TuneCP5_13TeV-powheg-pythia8/RunIISummer20UL16NanoAODAPVv9-106X_mcRun2_asymptotic_preVFP_v11-v1/NANOAODSIM',
         'ttbar-semilep': '/TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8/RunIISummer20UL16NanoAODAPVv9-106X_mcRun2_asymptotic_preVFP_v11-v1/NANOAODSIM',
         'QCDHT700': '/QCD_HT700to1000_TuneCP5_PSWeights_13TeV-madgraph-pythia8/RunIISummer20UL16NanoAODAPVv9-106X_mcRun2_asymptotic_preVFP_v11-v1/NANOAODSIM',
-        'QCDHT1000': '/QCD_HT1000to1500_TuneCP5_PSWeights_13TeV-madgraph-pythia8/RunIISummer20UL16NanoAODAPVv9-106X_mcRun2_asymptotic_preVFP_v11-v1/NANOAODSIM',        'QCDHT1500': '/QCD_HT1500to2000_TuneCP5_PSWeights_13TeV-madgraph-pythia8/RunIISummer20UL16NanoAODAPVv9-106X_mcRun2_asymptotic_preVFP_v11-v1/NANOAODSIM',        'QCDHT2000': '/QCD_HT2000toInf_TuneCP5_PSWeights_13TeV-madgraph-pythia8/RunIISummer20UL16NanoAODAPVv9-106X_mcRun2_asymptotic_preVFP_v11-v1/NANOAODSIM',
+        'QCDHT1000': '/QCD_HT1000to1500_TuneCP5_PSWeights_13TeV-madgraph-pythia8/RunIISummer20UL16NanoAODAPVv9-106X_mcRun2_asymptotic_preVFP_v11-v1/NANOAODSIM',        
+        'QCDHT1500': '/QCD_HT1500to2000_TuneCP5_PSWeights_13TeV-madgraph-pythia8/RunIISummer20UL16NanoAODAPVv9-106X_mcRun2_asymptotic_preVFP_v11-v1/NANOAODSIM',
+        'QCDHT2000': '/QCD_HT2000toInf_TuneCP5_PSWeights_13TeV-madgraph-pythia8/RunIISummer20UL16NanoAODAPVv9-106X_mcRun2_asymptotic_preVFP_v11-v1/NANOAODSIM',
         'ZJetsHT200': '/ZJetsToQQ_HT-200to400_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL16NanoAODAPVv9-106X_mcRun2_asymptotic_preVFP_v11-v2/NANOAODSIM',
         'ZJetsHT400': '/ZJetsToQQ_HT-400to600_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL16NanoAODAPVv9-106X_mcRun2_asymptotic_preVFP_v11-v2/NANOAODSIM',
         'ZJetsHT600': '/ZJetsToQQ_HT-600to800_TuneCP5_13TeV-madgraphMLM-pythia8/RunIISummer20UL16NanoAODAPVv9-106X_mcRun2_asymptotic_preVFP_v11-v2/NANOAODSIM',
@@ -56,7 +54,7 @@ das = {
         'SingleMuonDataF': '/SingleMuon/Run2016F-HIPM_UL2016_MiniAODv2_NanoAODv9-v2/NANOAOD'
     },
     '17': {
-	'XHY': '/NMSSM_XToYHTo2W2BTo2Q1L1Nu2B_MX-1000_MY-100_TuneCP5_13TeV-madgraph-pythia8/RunIISummer20UL17NanoAODv9-106X_mc2017_realistic_v9-v1/NANOAODSIM',
+	'XHY': '/NMSSM_XToYHTo2W2BTo2Q1L1Nu2B_MX-{}_MY-{}_TuneCP5_13TeV-madgraph-pythia8/RunIISummer20UL17NanoAODv9-106X_mc2017_realistic_v9-v1/NANOAODSIM',
         'ttbar-allhad': '/TTToHadronic_TuneCP5_13TeV-powheg-pythia8/RunIISummer20UL17NanoAODv9-106X_mc2017_realistic_v9-v1/NANOAODSIM',
         'ttbar-semilep': '/TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8/RunIISummer20UL17NanoAODv9-106X_mc2017_realistic_v9-v1/NANOAODSIM',
         'QCDHT700': '/QCD_HT700to1000_TuneCP5_PSWeights_13TeV-madgraph-pythia8/RunIISummer20UL17NanoAODv9-106X_mc2017_realistic_v9-v1/NANOAODSIM',
@@ -83,7 +81,7 @@ das = {
         'SingleMuonDataF': '/SingleMuon/Run2017E-UL2017_MiniAODv2_NanoAODv9-v1/NANOAOD'
     },
     '18': {
-	'XHY': '/NMSSM_XToYHTo2W2BTo2Q1L1Nu2B_MX-1000_MY-125_TuneCP5_13TeV-madgraph-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1-v1/NANOAODSIM',
+	'XHY': '/NMSSM_XToYHTo2W2BTo2Q1L1Nu2B_MX-{}_MY-{}_TuneCP5_13TeV-madgraph-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1-v1/NANOAODSIM',
         'ttbar-allhad': '/TTToHadronic_TuneCP5_13TeV-powheg-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1-v1/NANOAODSIM',
         'ttbar-semilep': '/TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1-v1/NANOAODSIM',
         'QCDHT700': '/QCD_HT700to1000_TuneCP5_PSWeights_13TeV-madgraph-pythia8/RunIISummer20UL18NanoAODv9-106X_upgrade2018_realistic_v16_L1v1-v2/NANOAODSIM',
@@ -101,7 +99,7 @@ das = {
         'DataA': '/JetHT/Run2018A-UL2018_MiniAODv2_NanoAODv9-v2/NANOAOD',
         'DataB': '/JetHT/Run2018B-UL2018_MiniAODv2_NanoAODv9-v1/NANOAOD',
         'DataC': '/JetHT/Run2018C-UL2018_MiniAODv2_NanoAODv9-v1/NANOAOD',
-        'DataD': '/JetHT/Run2018D-UL2018_MiniAODv2_NanoAODv9-v1/NANOAOD',
+        'DataD': '/JetHT/Run2018D-UL2018_MiniAODv2_NanoAODv9-v2/NANOAOD',
         'SingleMuonDataA': '/SingleMuon/Run2018A-UL2018_MiniAODv2_NanoAODv9_GT36-v1/NANOAOD',
         'SingleMuonDataB': '/SingleMuon/Run2018B-UL2018_MiniAODv2_NanoAODv9_GT36-v1/NANOAOD',
         'SingleMuonDataC': '/SingleMuon/Run2018C-UL2018_MiniAODv2_NanoAODv9_GT36-v1/NANOAOD',
@@ -114,7 +112,6 @@ def GetFiles(das_name, setname, year):
     das_name (str) = name of the dataset on DAS for query
     setname  (str) = name of the dataset for output file
     year     (str) = year of dataset (16, 16PAV, 17, 18)
-
     The CMS Data Aggregation System (DAS - https://cmsweb.cern.ch/das/) is a service used to
     aggregate all of the data and Monte Carlo files centrally. We will perform DAS queries to 
     get the remote location of all MC signal/background files, as well as data from the JetHT
@@ -144,8 +141,11 @@ if __name__=='__main__':
     latex_lines = {k:[] for k in das.keys()}
     # loop over our DAS dataset dictionary
     for year in das.keys():
+        if not year == '18':
+            continue
 	for setname in das[year].keys():
-	    if 'XHY' in setname:    # we're looking at signal
+	    if 'XHY' in setname:
+                # we're looking at signal
 		for mX in [240, 280, 300, 320, 360, 400, 500, 600, 700, 800, 900, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2400, 2500, 2600, 2800, 3000, 3500, 4000]:
 		    for mY in [60, 70, 80, 90, 100, 125,150, 250, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1600, 1800, 2000, 2200, 2400, 2500, 2600, 2800]:
 			if mY < mX+125:		# Y mass must be less than X mass plus Higgs mass
@@ -158,14 +158,18 @@ if __name__=='__main__':
 			    # append to our latex output
 			    latex_lines[year].append('| %s | %s |'%(setname_mod.replace('-', ' ')+' GeV',das_name))
 	    # otherwise, we're looking at data or SM MC bkgs
-	    else:
-		GetFiles(das[year][setname], setname, year)
-		latex_lines[year].append('| %s | %s |'%(setname,das[year][setname]))
+            else:
+                GetFiles(das[year][setname], setname, year)
+                latex_lines[year].append('| %s | %s |'%(setname,das[year][setname]))
+    GetFiles(das['18']['DataD'], 'DataD', '18')
+    latex_lines['18'].append('| %s | %s |'%('DataD',das['18']['DataD']))
     # print latex lines to stdout
     for y in sorted(latex_lines.keys()):
 	print('\n20%s'%y)
 	print('| Setname | DAS location |')
 	print('|---------|--------------|')
 	for l in latex_lines[y]: print(l)
+    
+
 
 
