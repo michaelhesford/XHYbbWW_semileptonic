@@ -82,7 +82,7 @@ class XHYbbWW:
         ttCR = 'true' if make_ttCR else 'false' #C++ booleans represented with lowercase
         self.NSTART = self.getNweighted()
         self.AddCutflowColumn(self.NSTART,'NSTART')
-        
+       
         flags = [
             'Flag_goodVertices',
             'Flag_globalSuperTightHalo2016Filter',
@@ -107,13 +107,10 @@ class XHYbbWW:
         self.AddCutflowColumn(self.LEPPRE,'LEPPRE')
 
         #events pass jet preselection
-        self.a.Define('isJetPre','isJetPreselected(nFatJet,FatJet_pt,FatJet_eta,FatJet_msoftdrop,nJet,Jet_pt,Jet_eta,{})'.format(ttCR))    
+        self.a.Define('isJetPre','isJetPreselected(nFatJet,FatJet_pt,FatJet_eta,FatJet_msoftdrop)')    
         self.a.Cut('isJetPreselected','isJetPre')
         self.JETPRE = self.getNweighted()
         self.AddCutflowColumn(self.JETPRE,'JETPRE') 
-        
-        #Make subcollection of loose b-tagged AK4's - just using to avoid a segmentation violation in the snapshot function
-        #self.a.SubCollection('BJet','Jet','Jet_btagDeepFlavB > {}'.format(self.cuts['JET']['btagL_{}'.format(self.year)]))
         
         #MET cut
         self.a.Cut('MET_cut','MET_pt > 25')
@@ -178,7 +175,6 @@ class XHYbbWW:
                 }
             )
     
-
     def ApplyJMECorrections(self, variation):
 	# for trigger effs
 	#self.a.Define('Trijet_vect_trig','hardware::TLvector(Trijet_pt, Trijet_eta, Trijet_phi, Trijet_msoftdrop)')
@@ -200,6 +196,19 @@ class XHYbbWW:
 	    self.a.Define('FatJet_msoftdrop_corr','hardware::MultiHadamardProduct(FatJet_msoftdrop,{FatJet_JES_nom})')
 	return self.a.GetActiveNode()
 
+    def ApplyPNetHbbReweight(self,wp=0.98):
+        #Definition of taggers - moved here from Dijets() fuction so I can run the scale factors beforehand
+        if 'XHY' in self.setname:   # only run on signal for now 
+            # Get the efficiency map from the rootfile
+            #effmap = 'root://cmseos.fnal.gov//store/user/mhesford/XHYbbWW_semileptonic/plots/HbbEfficiencies/{}_{}_HbbEfficiencies.root'.format(self.setname,self.year)
+            #effmap = '/uscms/home/mhesford/nobackup/XHYbbWW/CMSSW_11_1_4/src/semileptonic/plots/HbbEfficiencies/{}_{}_HbbEfficiencies.root'.format(self.setname,self.year)
+            effmap = '../semileptonic/plots/HbbEfficiencies/{}_{}_HbbEfficiencies.root'.format(self.setname,self.year)
+            # choose the working point to delineate Fail and Pass Hbb tagging
+            # the column names that will be used for the `eval()` function
+            cols = [ 'FatJet_pt_corr', 'FatJet_eta', 'FatJet_particleNetMD_HbbvsQCD']
+            PNetHbbWeight = Correction('PNetHbbWeight', 'TIMBER/Framework/include/PNetHbb_weight.h', constructor=[str(self.year), effmap, wp], mainFunc='eval', corrtype='weight', columnList=cols)
+            self.a.AddCorrection(PNetHbbWeight, evalArgs={'FatJet_pT':'FatJet_pt_corr', 'FatJet_eta':'FatJet_eta','FatJet_PNetHbbScore':'FatJet_particleNetMD_HbbvsQCD'})
+
     # for trigger efficiencies
     def ApplyTrigs(self):
         #For now, just apply triggers straight up
@@ -220,10 +229,10 @@ class XHYbbWW:
         if node == None:
             node = self.a.GetActiveNode()
         
-        #OLD         
         columns = [       
             'nJet','Jet_btagDeepFlavB','Jet_pt','Jet_eta','Jet_phi','Jet_mass','Jet_btagDeepB','Jet_jetId',
             'nFatJet','FatJet_eta','FatJet_msoftdrop','FatJet_pt','FatJet_phi','FatJet_JES_nom','FatJet_particleNetMD*', 'FatJet_rawFactor',
+            'FatJet_subJetIdx1','FatJet_subJetIdx2','FatJet_hadronFlavour','FatJet_nBHadrons','FatJet_nCHadrons','SubJet*'
             'FatJet_jetId','nCorrT1METJet','CorrT1METJet_*','nMuon','Muon_*','nElectron','Electron_*','HLT_*',
             'RawMET_phi','RawMET_pt','RawMET_sumEt','ChsMET_phi','ChsMET_pt','ChsMET_sumEt','MET_phi','MET_pt','MET_sumEt',
             'genWeight','event','eventWeight','luminosityBlock','run','NSTART','NFLAGS','LEPPRE','JETPRE','METPT'
@@ -274,14 +283,6 @@ class XHYbbWW:
         #Mass-decorrelated W tagger discriminant is defined by inclusion of X->cc
         #See slide 16: https://indico.cern.ch/event/809820/contributions/3632617/attachments/1970786/3278138/MassDecorrelation_ML4Jets_H_Qu.pdf
         #Right now I'm testing some older MC samples for WZ/ZZ-->llqq which do not have particleNet tagger info - run instead using deepTagMD, will treat exactly the same as particleNetMD for these initial tests
-        if '2L2Q' in self.setname:
-            #Falsely renaming deepTagMD so I don't have to change any of the other code 
-            self.a.Define('Dijet_particleNetMD_HbbvsQCD','Dijet_deepTagMD_HbbvsQCD > 0')
-            self.a.Define('Dijet_particleNetMD_WqqvsQCD','Dijet_deepTagMD_WvsQCD > 0')
-        else:
-            self.a.Define('Dijet_particleNetMD_HbbvsQCD','Dijet_particleNetMD_Xbb/(Dijet_particleNetMD_Xbb+Dijet_particleNetMD_QCD)')
-            self.a.Define('Dijet_particleNetMD_WqqvsQCD','(Dijet_particleNetMD_Xqq+Dijet_particleNetMD_Xcc)/(Dijet_particleNetMD_Xqq+Dijet_particleNetMD_Xcc+Dijet_particleNetMD_QCD)')
-  
         
         #Testing new method of initial jet IDing 
         #mark one jet as Higgs and other as Wqq
@@ -333,10 +334,11 @@ class XHYbbWW:
         return self.a.GetActiveNode()
 
     def GetXsecScale(self):
-        lumi = self.config['lumi{}'.format(self.year if 'APV' not in self.year else 16)]
+        lumi = self.config['lumi{}'.format(self.year)]
         xsec = self.config['XSECS'][self.setname]
         if self.a.genEventSumw == 0:
             raise ValueError('%s %s: genEventSumw is 0'%(self.setname, self.year))
+        print('Normalizing by lumi*xsec/genEventSumw:\n\t{} * {} / {} = {}'.format(lumi,xsec,self.a.genEventSumw,lumi*xsec/self.a.genEventSumw))
         return lumi*xsec/self.a.genEventSumw
 
     def ApplyMassCuts(self):
@@ -367,7 +369,7 @@ class XHYbbWW:
                 Note: We want the control region to be void of signal/high in background, but we don't want it to be so different from the signal region. 
                       It should be similar enough to the signal region, but statistically disjunct.
 	'''
-	assert(SRorCR=='SR' or SRorCR=='ttCR_HF' or SRorCR=='ttCR_dPhi')
+	assert(SRorCR=='SR' or SRorCR=='ttCR_HF' or SRorCR=='ttCR_dPhi' or SRorCR=='ttCR_combined')
 	# tagger values for each 
 	if SRorCR == 'SR':
 	    # Signal region 
@@ -393,7 +395,7 @@ class XHYbbWW:
             self.nJetB_ttCR_HF = self.getNweighted()
             self.AddCutflowColumn(self.nJetB_ttCR_HF, 'nJetB_ttCR_HF')
             
-        else: #SRorCR == 'ttCR_dPhi'
+        elif SRorCR == 'ttCR_dPhi':
             self.a.Cut('DeltaPhi_Lepton_Higgs_{}'.format(SRorCR),'abs(hardware::DeltaPhi(Lepton_phi,Higgs_phi)) < 0.5')
             self.nDPhiLH_ttCR = self.getNweighted()
             self.AddCutflowColumn(self.nDPhiLH_ttCR,'nDPhiLH_ttCR')        
@@ -403,6 +405,18 @@ class XHYbbWW:
             self.a.Cut('nbtaggedJet_dPhi','btag_idx != -1')
             self.nJetB_ttCR_dPhi = self.getNweighted()
             self.AddCutflowColumn(self.nJetB_ttCR_dPhi, 'nJetB_ttCR_dPhi')
+
+        elif SRorCR == 'ttCR_combined':
+            self.a.Cut('ttCR_combined_cut','abs(hardware::DeltaPhi(Lepton_phi,Higgs_phi)) < 0.5 || Higgs_{}_HbbvsQCD < {}'.format(tagger,self.cuts['JET']['particleNetMD_HbbvsQCD']))
+            self.nttCR_combined = self.getNweighted()
+            self.AddCutflowColumn(self.nttCR_combined,'nttCR_combined')        
+
+            self.a.Define('Jet_vect','hardware::TLvector(Jet_pt,Jet_eta,Jet_phi,Jet_mass)')
+            self.a.Define('btag_idx','PickJetB(Jet_vect,Lepton_vect,Jet_btagDeepFlavB,{})'.format(self.cuts['JET']['btagM_{}'.format(self.year)]))
+            self.a.Cut('nbtaggeJet_dPhi','btag_idx != -1')
+            self.nJetB_ttCR_combined = self.getNweighted()
+            self.AddCutflowColumn(self.nJetB_ttCR_combined, 'nJetB_ttCR_combined')
+
 
         return self.a.GetActiveNode()
     
@@ -435,143 +449,6 @@ class XHYbbWW:
         # reset state, return dict
         self.a.SetActiveNode(checkpoint)
         return FP
-
-    '''
-    def ApplyPassFail(self, SRorCR, tagger):
-	
-	Fail:	Wqq < 0.8
-	Pass: 	Wqq > 0.8
-	
-	assert(SRorCR=='SR' or SRorCR=='CR' or SRorCR=='ttCR')
-	checkpoint = self.a.GetActiveNode()
-	FP = OrderedDict()
-	# Wqq fail + cutflow info
-	FP['fail_'+SRorCR] = self.a.Cut('WqqTag_fail','Wqq_{0}_WqqvsQCD < {1}'.format(tagger, self.cuts['JET']['particleNetMD_WqqvsQCD']))
-	if SRorCR=='SR':
-	    self.nWF_SR = self.getNweighted()
-	    self.AddCutflowColumn(self.nWF_SR, 'WqqF_SR')
-	else:
-	    self.nWF_CR = self.getNweighted()
-	    self.AddCutflowColumn(self.nWF_CR, 'WqqF_CR')
-
-	# Wqq Pass + cutflow
-	self.a.SetActiveNode(checkpoint)
-	FP['pass_'+SRorCR] = self.a.Cut('WqqTag_pass','Wqq_{0}_WqqvsQCD > {1}'.format(tagger, self.cuts['JET']['particleNetMD_WqqvsQCD']))
-	if SRorCR == 'SR':
-	    self.nWP_SR = self.getNweighted()
-	    self.AddCutflowColumn(self.nWP_SR, 'WqqP_SR')
-	else:
-	    self.nWP_CR = self.getNweighted()
-	    self.AddCutflowColumn(self.nWP_CR, 'WqqP_CR')
-
-	# reset state, return dict
-	self.a.SetActiveNode(checkpoint)
-	return FP
-    '''
-    '''
-    def ApplySRorCR(self, SRorCR, tagger): #This is getting frequently updated as I play w/ different definitions
-	
-	SRorCR [str] = 'SR' or 'CR', used to generate cutflow information
-	tagger [str] = name of tagger to be used 
-	Selection criteria:
-		SR: Wqq > 0.8
-                    Electron_mvaFall17V2noIso_WP80 || Muon_MediumId  
-                    Lepton_miniPFRelIso_all < 0.2
-		CR: 0.4 < Wqq < 0.8
-                    Electron_mvaFall17V2noIso_WP80 || Muon_MediumId #want good quality leptons even in conrol region
-                    0.2 < Lepton_miniPFRelIso_all < 0.5
-                ttCR: Wqq < 0.8
-                    Electron_mvaFall17V2noIso_WP80 || Muon_MediumId #keep normal lepton cuts
-                    Lepton_miniPFRelIso_all < 0.2
-                    b-tagged AK4 jet exists
-                Note: We want the control region to be void of signal/high in background, but we don't want it to be so different from the signal region. 
-                      It should be similar enough to the signal region, but statistically disjunct.
-	
-	assert(SRorCR=='SR' or SRorCR=='CR' or SRorCR=='ttCR')
-	# tagger values for each 
-	if SRorCR == 'SR':
-	    # Signal region
-	    self.a.Cut('Wqq_{}_cut_{}'.format(tagger,SRorCR), 'Wqq_{}_WqqvsQCD > {}'.format(tagger,self.cuts['JET']['particleNetMD_WqqvsQCD'][1]))
-            self.nWtag_SR = self.getNweighted()
-            self.AddCutflowColumn(self.nWtag_SR, 'nWtag_SR')
-
-            self.a.Cut('lepIsolation_{}'.format(SRorCR),'LeptonType == 0? Electron_miniPFRelIso_all[kinEleIdx] < {} : Muon_miniPFRelIso_all[kinMuIdx] < {}'.format(self.cuts['ELECTRON']['RelIso'][0],self.cuts['MUON']['RelIso'][0]))
-            self.nlepIso_SR = self.getNweighted()
-            self.AddCutflowColumn(self.nlepIso_SR, 'nlepIso_SR')
-            self.a.Cut('leptonQuality_{}'.format(SRorCR),'LeptonType == 0? {}[kinEleIdx] : {}[kinMuIdx]'.format(self.cuts['ELECTRON']['mva80'],self.cuts['MUON']['mediumId']))
-            self.nlepQ_SR = self.getNweighted()
-            self.AddCutflowColumn(self.nlepQ_SR, 'nlepQ_SR')
-
-            #This seems to be quite bad for signal
-            #self.a.Define('Jet_btag','Jet_btagDeepFlavB > {}'.format(self.cuts['JET']['btag'])) #we want to veto events with a b-tagged AK4 jet, which we will use to define the ttbar control region
-            #self.a.Cut('nbtaggedJet','Jet_btag.size() == 0')
-           
-	elif SRorCR == 'CR':
-	    # Control Region
-	    self.a.Cut('Wqq_{}_cut_{}'.format(tagger,SRorCR), 'Wqq_{0}_WqqvsQCD > {1} && Wqq_{0}_WqqvsQCD < {2}'.format(tagger,self.cuts['JET']['particleNetMD_WqqvsQCD'][0],self.cuts['JET']['particleNetMD_WqqvsQCD'][1]))
-            self.nWtag_CR = self.getNweighted()
-            self.AddCutflowColumn(self.nWtag_CR, 'nWtag_CR')
-
-            self.a.Cut('lepIsolation_{}'.format(SRorCR),'LeptonType == 0? Electron_miniPFRelIso_all[kinEleIdx] > {} && Electron_miniPFRelIso_all[kinEleIdx] < {} : Muon_miniPFRelIso_all[kinMuIdx] > {} && Muon_miniPFRelIso_all[kinMuIdx] < {}'.format(self.cuts['ELECTRON']['RelIso'][0], self.cuts['ELECTRON']['RelIso'][1], self.cuts['MUON']['RelIso'][0], self.cuts['MUON']['RelIso'][1]))
-            self.nlepIso_CR = self.getNweighted()
-            self.AddCutflowColumn(self.nlepIso_CR, 'nlepIso_CR')
-
-            self.a.Cut('leptonQuality_{}'.format(SRorCR),'LeptonType == 0? {}[kinEleIdx] : {}[kinMuIdx]'.format(self.cuts['ELECTRON']['mva80'],self.cuts['MUON']['mediumId']))
-            self.nlepQ_CR = self.getNweighted()
-            self.AddCutflowColumn(self.nlepQ_CR, 'nlepQ_CR')       
- 
-        else:
-            #ttbar control region
-            self.a.Cut('Wqq_{}_cut_ttCR'.format(tagger), 'Wqq_{}_WqqvsQCD < {}'.format(tagger,self.cuts['JET']['particleNetMD_WqqvsQCD'][1]))
-            self.nWtag_ttCR = self.getNweighted()
-            self.AddCutflowColumn(self.nWtag_ttCR, 'nWtag_ttCR')
-
-            self.a.Cut('lepIsolation_ttCR','LeptonType == 0? Electron_miniPFRelIso_all[kinEleIdx] < {} : Muon_miniPFRelIso_all[kinMuIdx] < {}'.format(self.cuts['ELECTRON']['RelIso'][0],self.cuts['MUON']['RelIso'][0]))
-            self.nlepIso_ttCR = self.getNweighted()
-            self.AddCutflowColumn(self.nlepIso_ttCR, 'nlepIso_ttCR')
-
-            self.a.Cut('leptonQuality_ttCR'.format(SRorCR),'LeptonType == 0? {}[kinEleIdx] : {}[kinMuIdx]'.format(self.cuts['ELECTRON']['mva80'],self.cuts['MUON']['mediumId']))
-            self.nlepQ_ttCR = self.getNweighted()
-            self.AddCutflowColumn(self.nlepQ_ttCR, 'nlepQ_ttCR')
-
-            self.a.Define('Jet_btag','Jet_btagDeepFlavB > {}'.format(self.cuts['JET']['btag_{}'.format(self.year)]))
-            self.a.Cut('nbtaggedJet','Jet_btag.size() > 0') #must define signal region in advance
-            self.nJetB_ttCR = self.getNweighted()
-            self.AddCutflowColumn(self.nJetB_ttCR, 'nJetB_ttCR')
-
-        return self.a.GetActiveNode()
-
-    def ApplyPassFail(self, SRorCR, tagger):
-        
-        Fail:	Hbb < 0.94
-        Pass: 	Hbb > 0.94
-        
-        assert(SRorCR=='SR' or SRorCR=='CR' or SRorCR=='ttCR')
-        checkpoint = self.a.GetActiveNode()
-        FP = OrderedDict()
-        # Higgs fail + cutflow info
-        FP['fail_'+SRorCR] = self.a.Cut('HbbTag_fail','Higgs_{0}_HbbvsQCD < {1}'.format(tagger, self.cuts['JET']['particleNetMD_HbbvsQCD']))
-        if SRorCR=='SR':
-            self.nHF_SR = self.getNweighted()
-            self.AddCutflowColumn(self.nHF_SR, 'higgsF_SR')
-        else:
-            self.nHF_CR = self.getNweighted()
-            self.AddCutflowColumn(self.nHF_CR, 'higgsF_CR')
-
-	# Higgs Pass + cutflow
-	self.a.SetActiveNode(checkpoint)
-	FP['pass_'+SRorCR] = self.a.Cut('HbbTag_pass','Higgs_{0}_HbbvsQCD > {1}'.format(tagger, self.cuts['JET']['particleNetMD_HbbvsQCD']))
-	if SRorCR == 'SR':
-	    self.nHP_SR = self.getNweighted()
-	    self.AddCutflowColumn(self.nHP_SR, 'higgsP_SR')
-	else:
-	    self.nHP_CR = self.getNweighted()
-	    self.AddCutflowColumn(self.nHP_CR, 'higgsP_CR')
-
-	# reset state, return dict
-	self.a.SetActiveNode(checkpoint)
-	return FP
-    '''
 
     def make_ttCR(self):
         #Built from ttCR snapshots - fuction to create ttbar control region for use in fitting ttbar to data
