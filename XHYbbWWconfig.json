@@ -1,5 +1,7 @@
 {
-    "lumi16":35917.213466,
+    "lumi16total":35917.213466,
+    "lumi16APV":19500.0,
+    "lumi16":16800.0,
     "lumi17":41521.427777,
     "lumi18":59692.687741,
     "XSECS" : {
@@ -12,6 +14,12 @@
 	"WJetsHT400":315.2,
 	"WJetsHT600":68.58,
 	"WJetsHT800":34.69,
+        "WJetsToLNuHT200":335.5,
+        "WJetsToLNuHT400":45.25,
+        "WJetsToLNuHT600":10.97,
+        "WJetsToLNuHT800":4.933,
+        "WJetsToLNuHT1200":1.16,
+        "WJetsToLNuHT2500":0.02646,
 	"ZJetsHT400":145.3,
 	"ZJetsHT600":34.29,
 	"ZJetsHT800":18.57,
@@ -33,17 +41,17 @@
         "16" : {
             "HADRONIC" : ["HLT_PFHT800","HLT_PFHT900"],
             "ELECTRON" : ["HLT_Ele27_WPTight_Gsf","HLT_Ele115_CaloIdVT_GsfTrkIdT","HLT_Ele45_CaloIdVT_GsfTrkIdT_PFJet200_PFJet50","HLT_Ele50_CaloIdVT_GsfTrkIdT_PFJet165","HLT_Photon175"],
-            "MUON" : ["HLT_Mu50","HLT_TkMu50","HLT_IsoMu24"]
+            "MUON" : ["HLT_Mu50","HLT_IsoMu24","HLT_TkMu50","HLT_IsoMu24"]
         },
         "17" : {
             "HADRONIC" : ["HLT_PFHT1050","HLT_AK8PFJet500","HLT_AK8PFHT750_TrimMass50","HLT_AK8PFHT800_TrimMass50","HLT_AK8PFJet400_TrimMass30"],
             "ELECTRON" : ["HLT_Ele35_WPTight_Gsf","HLT_Ele115_CaloIdVT_GsfTrkIdT","HLT_Ele32_WPTight_Gsf_L1DoubleEG","HLT_Ele50_CaloIdVT_GsfTrkIdT_PFJet165","HLT_Photon200"], 
-            "MUON" : ["HLT_Mu50","HLT_TkMu100","HLT_IsoMu27","HLT_OldMu100"]
+            "MUON" : ["HLT_Mu50","HLT_IsoMu24","HLT_TkMu100","HLT_IsoMu27","HLT_OldMu100"]
         },
         "18" : {
             "HADRONIC" : ["HLT_PFHT1050","HLT_AK8PFJet400_TrimMass30","HLT_AK8PFHT850_TrimMass50"],
             "ELECTRON" : ["HLT_Ele32_WPTight_Gsf","HLT_Ele115_CaloIdVT_GsfTrkIdT","HLT_Ele50_CaloIdVT_GsfTrkIdT_PFJet165","HLT_Photon200"],
-            "MUON" : ["HLT_Mu50","HLT_TkMu100","HLT_IsoMu24","HLT_OldMu100"]
+            "MUON" : ["HLT_Mu50","HLT_IsoMu24","HLT_TkMu100","HLT_IsoMu24","HLT_OldMu100"]
         }
     },
     "CUTS" : {
@@ -51,8 +59,15 @@
 	    "mh":[100,145],
 	    "mw":[65,100],
 	    "particleNetMD_HbbvsQCD":0.94,
-	    "particleNetMD_WqqvsQCD":[0.4,0.8],
-            "btag":0.8
+	    "particleNetMD_WqqvsQCD":0.8,
+            "btagL_18":0.0490,
+            "btagL_17":0.0532,
+            "btagL_16APV":0.0508,
+            "btagL_16":0.0480,
+            "btagM_18":0.2783,
+            "btagM_17":0.3040,
+            "btagM_16APV":0.2598,
+            "btagM_16":0.2489
         }, 
         "ELECTRON" : {
             "pt":25,
