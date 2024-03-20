@@ -38,7 +38,18 @@ int PickJetB(RVec<ROOT::Math::PtEtaPhiMVector> Jet_vect, ROOT::Math::PtEtaPhiMVe
     // Pick index of highest pt b-tagged ak4 jet with deltaR (jet,lepton) < 2
     int Jet_idx = -1;
     for (int idx=0; idx<Jet_vect.size(); idx++) {
-        if (btag[idx] > wp && hardware::DeltaR(Jet_vect[idx],Lepton_vect) < 2) {
+        if (Jet_vect[idx].Pt() > 25 && std::abs(Jet_vect[idx].Eta()) < 2.4 && btag[idx] > wp && hardware::DeltaR(Jet_vect[idx],Lepton_vect) < 2) {
+            Jet_idx = idx;
+            break;
+        }
+    }
+    return Jet_idx;
+}
+
+int PickAK8(RVec<ROOT::Math::PtEtaPhiMVector> FatJet_vect, ROOT::Math::PtEtaPhiMVector BJet_vect, ROOT::Math::PtEtaPhiMVector Lepton_vect) {
+    int Jet_idx = -1;
+    for (int idx=0; idx<FatJet_vect.size(); idx++) {
+        if (FatJet_vect[idx].Pt() > 200 && std::abs(FatJet_vect[idx].Eta()) < 2.4 && hardware::DeltaR(FatJet_vect[idx],Lepton_vect) > 0.8 && hardware::DeltaR(FatJet_vect[idx],BJet_vect) > 0.8) {
             Jet_idx = idx;
             break;
         }
@@ -175,11 +186,55 @@ float DeltaR(float eta1, float phi1, float eta2, float phi2) {
     return deltaR;
 }
 
-RVec<int> JetFlavor_ttbar(RVec<float> Jet_eta, RVec<float> Jet_phi, RVec<float> Gen_eta, RVec<float> Gen_phi, RVec<int> pdgId, RVec<int> motherIdx) {
+int JetFlavor_ttbar(float Jet_eta, float Jet_phi, RVec<float> Gen_eta, RVec<float> Gen_phi, RVec<int> pdgId, RVec<int> motherIdx) {
     // EXPERIMENTAL: Assigns true flavor to ttbar MC AK8 jets based on gen particles inside the jet cone (R=0.8):
+    // To be used on a single jet (not an RVec collection)
     // Output: a number corresponding to jet flavor
     // 0: merged top jet
     // 1: merged W jet
+    // 2: bq jet
+    // 3: unmerged jet
+    std::vector<int> b, q; // bottom quarks from top decays, quarks from W decays
+    for (int igen = 0; igen<Gen_eta.size(); igen++) { // loop over gen particles
+        int genId = pdgId[igen];
+        int mother_genId = pdgId[motherIdx[igen]];
+        int grandmother_genId = pdgId[motherIdx[motherIdx[igen]]];
+        // Pull out all b quarks from top decays, quarks from W decays (w/ grandmother top)
+        if (std::abs(genId) == 5 && std::abs(mother_genId) == 6) {b.push_back(igen);}
+        else if (std::abs(genId) < 6 && std::abs(genId) > 0 && std::abs(mother_genId) == 24) {
+            // make sure mother of W is not just another W
+            int greatgrandmother_genId = pdgId[motherIdx[motherIdx[motherIdx[igen]]]];
+            if (std::abs(grandmother_genId) == 6) {q.push_back(igen);}
+            else if (std::abs(grandmother_genId) == 24 && std::abs(greatgrandmother_genId) == 6) {q.push_back(igen);}
+        }
+    }
+    int jetId = 3; // assume unmerged jet
+    int n_bfromt = 0; // b quarks from top decay inside jet cone
+    int n_qfromW = 0; // quarks form W decay insdie jet cone
+    // Impose delta R requirements
+    for (int i : b) {
+        if (DeltaR(Jet_eta, Jet_phi, Gen_eta[i], Gen_phi[i]) < 0.8) {n_bfromt += 1;}
+    }
+    for (int i : q) {
+        if (DeltaR(Jet_eta, Jet_phi, Gen_eta[i], Gen_phi[i]) < 0.8) {n_qfromW += 1;}
+    }
+    if (n_qfromW >= 1) {
+        if (n_qfromW >= 2) {
+            if (n_bfromt >= 1) {jetId = 0;} // merged top jet
+            else {jetId = 1;} // merged W jet
+        }
+        else if (n_bfromt >= 1) {jetId = 3;} // bq jet        
+    }
+    return jetId;
+}
+
+RVec<int> JetFlavor_ttbar_vec(RVec<float> Jet_eta, RVec<float> Jet_phi, RVec<float> Gen_eta, RVec<float> Gen_phi, RVec<int> pdgId, RVec<int> motherIdx) {
+    // EXPERIMENTAL: Assigns true flavor to ttbar MC AK8 jets based on gen particles inside the jet cone (R=0.8):
+    // To be used on an RVec collection of jets (like FatJet)
+    // Output: a number corresponding to jet flavor
+    // 0: merged top jet
+    // 1: merged W jet
+    // 2: bq jet
     // 3: unmerged jet
     std::vector<int> b, q; // bottom quarks from top decays, quarks from W decays
     for (int igen = 0; igen<Gen_eta.size(); igen++) { // loop over gen particles
@@ -207,9 +262,12 @@ RVec<int> JetFlavor_ttbar(RVec<float> Jet_eta, RVec<float> Jet_phi, RVec<float> 
         for (int i : q) {
             if (DeltaR(Jet_eta[ijet], Jet_phi[ijet], Gen_eta[i], Gen_phi[i]) < 0.8) {n_qfromW += 1;}
         }
-        if (n_qfromW >= 2) {
-            if (n_bfromt >= 1) {flav = 0;} // merged top jet
-            else {flav = 1;} // merged W jet        
+        if (n_qfromW >= 1) {
+            if (n_qfromW >= 2) {
+                if (n_bfromt >= 1) {flav = 0;} // merged top jet
+                else {flav = 1;} // merged W jet
+            }
+            else if (n_bfromt >= 1) {flav = 3;} // bq jet        
         }
         jetId[ijet] = flav;
     }
@@ -220,7 +278,7 @@ RVec<int> JetFlavor_signal(RVec<float> Jet_eta, RVec<float> Jet_phi, RVec<float>
     // EXPERIMENTAL: Assigns true flavor to signal MC AK8 jets based on gen particles inside the jet cone (R=0.8): 
     // Output: an RVec of numbers corresponding to jet flavors
     //     1: merged Wqq jet
-    //     2: merged Hbb jet
+    //     4: merged Hbb jet
     //     3: unmerged jet
     std::vector<int> b, q; // bottom quarks from H decays, quarks from W decays
     RVec<int> jetId(Jet_eta.size()); // vector of jet flavors
@@ -243,7 +301,7 @@ RVec<int> JetFlavor_signal(RVec<float> Jet_eta, RVec<float> Jet_phi, RVec<float>
         for (int i : q) {
             if (DeltaR(Jet_eta[ijet], Jet_phi[ijet], Gen_eta[i], Gen_phi[i]) < 0.8) {n_qfromW += 1;}
         }
-        if (n_bfromH >= 2) {flav = 2;} // First check if merged Higgs
+        if (n_bfromH >= 2) {flav = 4;} // First check if merged Higgs
         else if (n_qfromW >= 2) {flav = 1;} // Merged W
         jetId[ijet] = flav;
     }
