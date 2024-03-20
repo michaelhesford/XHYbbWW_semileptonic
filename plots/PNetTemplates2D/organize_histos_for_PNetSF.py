@@ -91,7 +91,7 @@ if __name__ == '__main__':
     
     tagger_wps = {'Hbb':'0.98','Wqq':'0.80'}
     for tagger, wp in tagger_wps.items():
-        #combine_ttbar(tagger)
+        combine_ttbar(tagger)
         organize_ttbar_templates(tagger,wp)
         MakeRun2(tagger,wp)
     
