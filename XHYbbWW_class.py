@@ -38,6 +38,7 @@ class XHYbbWW:
     def __init__(self, inputfile, ijob=1, njobs=1):
         #inputfile format is '(raw_nano or snapshots)/SETNAME_YEAR(maybe _+something else).txt'
         infiles = SplitUp(inputfile,njobs)[ijob-1]
+        print(infiles)
         self.setname = inputfile.split('/')[1].split('_')[0]
         self.year = inputfile.split('/')[1].split('_')[1].split('.')[0]
         self.ijob = ijob
@@ -78,8 +79,6 @@ class XHYbbWW:
             return self.a.DataFrame.Count().GetValue()
 
     def BasicKinematics(self,make_ttCR=False): #nothing super selective, but should cut out some obviously uninteresting events
-        #make separate snapshots which will be used to create ttbar control region for measurement of systematics
-        ttCR = 'true' if make_ttCR else 'false' #C++ booleans represented with lowercase
         self.NSTART = self.getNweighted()
         self.AddCutflowColumn(self.NSTART,'NSTART')
        
@@ -119,6 +118,48 @@ class XHYbbWW:
         
         return self.a.GetActiveNode()
 
+    def MakePNetCR(self):
+        '''
+        Creates control region used for calculating particleNet mistagging SF's in ttbar (ttbar enriched region)
+        Requirements: 
+            Leptonic top decay signatures:
+            -1 electron(muon) w/ pT > 25 GeV, |eta| < 2.5(2.4), mini_iso < 0.1, pass tight ID
+            -1 b-tagged AK4 jet w/ pT > 25, |eta| < 2.4, pass jetId 
+            -MET > 30
+            Search for (what is hopefully) a top jet
+            -AK8 jet w/ pT > 200, |eta| < 2.4
+                -DeltaR(AK8, lepton) > 0.8
+                -DeltaR(AK8, AK4) > 0.8
+        '''
+        self.KinematicLepton() #should cover all the lepton criteria
+
+        #Now pick AK4 jet            
+        self.a.Define('Jet_vect','hardware::TLvector(Jet_pt,Jet_eta,Jet_phi,Jet_mass)')
+        self.a.Define('btag_idx','PickJetB(Jet_vect,Lepton_vect,Jet_btagDeepFlavB,{})'.format(self.cuts['JET']['btagM_{}'.format(self.year)]))
+        self.a.Cut('nbtaggedJet','btag_idx != -1')
+        self.nBtag = self.getNweighted()
+        self.AddCutflowColumn(self.nBtag, 'nBtag')
+        self.a.ObjectFromCollection('BJet','Jet','btag_idx')
+
+        #MET
+        self.a.Cut('ChsMET','ChsMET_pt > 30')
+        self.nMET = self.getNweighted()
+        self.AddCutflowColumn(self.nMET, 'nMET')
+                        
+        #Now look for AK8 jet
+        self.a.Define('FatJet_vect','hardware::TLvector(FatJet_pt,FatJet_eta,FatJet_phi,FatJet_msoftdrop)')
+        self.a.Define('ak8jet_idx','PickAK8(FatJet_vect,BJet_vect,Lepton_vect)')
+        self.a.Cut('nak8jet','ak8jet_idx != -1')
+        self.nProbe = self.getNweighted()
+        self.AddCutflowColumn(self.nProbe, 'nProbe')
+        self.a.ObjectFromCollection('ProbeJet','FatJet','ak8jet_idx')  
+
+        #Define taggers used
+        self.a.Define('ProbeJet_particleNetMD_HbbvsQCD','ProbeJet_particleNetMD_Xbb/(ProbeJet_particleNetMD_Xbb+ProbeJet_particleNetMD_QCD)')
+        self.a.Define('ProbeJet_particleNetMD_WqqvsQCD','(ProbeJet_particleNetMD_Xqq+ProbeJet_particleNetMD_Xcc)/(ProbeJet_particleNetMD_Xqq+ProbeJet_particleNetMD_Xcc+ProbeJet_particleNetMD_QCD)')
+
+        return self.a.GetActiveNode()
+
     def ApplyStandardCorrections(self, snapshot=False):
         # first apply corrections for snapshot phase
         if snapshot:
@@ -133,7 +174,7 @@ class XHYbbWW:
                 self.a = ApplyPU(self.a, 'XHYbbWWpileup.root', '20{}'.format(self.year), ULflag=True, histname='{}_{}'.format(self.setname,self.year))
                 self.a.AddCorrection(Correction('Pdfweight','TIMBER/Framework/include/PDFweight_uncert.h',[self.a.lhaid],corrtype='uncert'))
                 if self.year == '16' or self.year == '17' or 'APV' in self.year:
-                    L1PreFiringWeight = Correction("L1PreFiringWeight","TIMBER/Framework/TopPhi_modules/BranchCorrection.cc",constructor=[],mainFunc='evalWeight',corrtype='weight',columnList=['L1PreFiringWeight_Nom','L1PreFiringWeight_Up','L1PreFiringWeight_Dn'])
+                    L1PreFiringWeight = Correction("L1PreFiringWeight","TIMBER/Framework/Zbb_modules/BranchCorrection.cc",constructor=[],mainFunc='evalWeight',corrtype='weight',columnList=['L1PreFiringWeight_Nom','L1PreFiringWeight_Up','L1PreFiringWeight_Dn'])
                     self.a.AddCorrection(L1PreFiringWeight, evalArgs={'val':'L1PreFiringWeight_Nom','valUp':'L1PreFiringWeight_Up','valDown':'L1PreFiringWeight_Dn'})
                 #elif self.year == '18':
                     #self.a.AddCorrection(Correction('HEM_drop','TIMBER/Framework/include/HEM_drop.h',[self.setname],corrtype='corr'))
@@ -143,17 +184,6 @@ class XHYbbWW:
             if not self.a.isData:
                 self.a.AddCorrection(Correction('Pileup',corrtype='weight'))
                 self.a.AddCorrection(Correction('Pdfweight',corrtype='uncert'))                
-                if 'ttbar' in self.setname:
-                    self.a.Define('GenParticle_vect','hardware::TLvector(GenPart_pt, GenPart_eta, GenPart_phi, GenPart_mass)')
-                    self.a.AddCorrection(
-                        Correction('TptReweight','TIMBER/Framework/include/TopPt_weight.h',corrtype='weight'),
-                        evalArgs={
-                            'jet0':'hardware::TLvector(Wqq_pt_corr,Wqq_eta,Wqq_phi,Wqq_msoftdrop_corr)',
-                            'jet1':'hardware::TLvector(Higgs_pt_corr,Higgs_eta,Higgs_phi,Higgs_msoftdrop_corr)',
-                            'GenPart_vect':'GenParticle_vect',
-                            'scale':'1'
-                        }
-                    )
                 if self.year == '16' or self.year == '17' or 'APV' in self.year:
                     self.a.AddCorrection(Correction('L1PreFiringWeight',corrtype='weight'))
                 elif self.year == '18':
@@ -161,63 +191,133 @@ class XHYbbWW:
         return self.a.GetActiveNode()
 
     
-    def ApplyTopPtReweight(self):
+    def ApplyTopPtReweight(self,jet0,jet1,scale = 1, isJet1AK4 = False):
+        #isJet1AK4 asks if the second jet is an AK4 jet, in which case definitions of mass/momentum are different
         if 'ttbar' in self.setname:
+            if isJet1AK4:
+                jet1_pt = 'pt'
+                jet1_mass = 'mass'
+            else:
+                jet1_pt = 'pt_corr'
+                jet1_mass = 'msoftdrop_corr'
             self.a.Define('GenParticle_vect','hardware::TLvector(GenPart_pt, GenPart_eta, GenPart_phi, GenPart_mass)')
             self.a.AddCorrection(
                 Correction('TptReweight','TIMBER/Framework/include/TopPt_weight.h',corrtype='weight'),
-                evalArgs={
-                    #'jet0':'hardware::TLvector(Wqq_pt_corr,Wqq_eta,Wqq_phi,Wqq_msoftdrop_corr)',
-                    #'jet1':'hardware::TLvector(Higgs_pt_corr,Higgs_eta,Higgs_phi,Higgs_msoftdrop_corr)',
-                    'jet0':'hardware::TLvector(bJet_pt,bJet_eta,bJet_phi,bJet_mass)',
-                    'jet1':'hardware::TLvector(bqqJet_pt,bqqJet_eta,bqqJet_phi,bqqJet_msoftdrop)',
-                    'GenPart_vect':'GenParticle_vect'
-                }
-            )
-    
-    def ApplyJMECorrections(self, variation):
+                    evalArgs={
+                        'jet0':'hardware::TLvector({0}_pt_corr,{0}_eta,{0}_phi,{0}_msoftdrop_corr)'.format(jet0),
+                        'jet1':'hardware::TLvector({0}_{1},{0}_eta,{0}_phi,{0}_{2})'.format(jet1,jet1_pt,jet1_mass),
+                        'GenPart_vect':'GenParticle_vect',
+                        'scale':scale
+                    }
+             )  
+   
+ 
+    def ApplyJMECorrections(self, variation, jets = ['FatJet']):
 	# for trigger effs
 	#self.a.Define('Trijet_vect_trig','hardware::TLvector(Trijet_pt, Trijet_eta, Trijet_phi, Trijet_msoftdrop)')
 	#self.a.Define('mhww_trig','hardware::InvariantMass(Trijet_vect_trig)')
 	
         # JME variations - we only do this for MC
-        if not self.a.isData:
-	    # since H, W close enough in mass, we can treat them the same. 
-	    # Higgs, W will have same pt and mass calibrations
-	    # WARNING --------------------------------------------------------------------------------------------------------------
-	    # IS THIS ACTUALLY TRUE?
-            # IS IT, AMITAV? IS IT???
-	    # ----------------------------------------------------------------------------------------------------------------------
-            pt_calibs, mass_calibs = JMEvariationStr('Higgs',variation)
-            self.a.Define('FatJet_pt_corr','hardware::MultiHadamardProduct(FatJet_pt,%s)'%pt_calibs)
-            self.a.Define('FatJet_msoftdrop_corr','hardware::MultiHadamardProduct(FatJet_msoftdrop,{})'.format(mass_calibs))
-        else:
-            self.a.Define('FatJet_pt_corr','hardware::MultiHadamardProduct(FatJet_pt,{FatJet_JES_nom})')
-            self.a.Define('FatJet_msoftdrop_corr','hardware::MultiHadamardProduct(FatJet_msoftdrop,{FatJet_JES_nom})')
+        for jet in jets:
+            if not self.a.isData:
+    	        # since H, W close enough in mass, we can treat them the same. 
+    	        # Higgs, W will have same pt and mass calibrations
+    	        # WARNING --------------------------------------------------------------------------------------------------------------
+	        # IS THIS ACTUALLY TRUE?
+                # IS IT, AMITAV? IS IT???
+	        # ----------------------------------------------------------------------------------------------------------------------
+                pt_calibs, mass_calibs = JMEvariationStr('Higgs',jet,variation)
+                if jet == 'FatJet': #dealing with RVec quantities, need to do hadamard product
+                    self.a.Define('{}_pt_corr'.format(jet),'hardware::MultiHadamardProduct({}_pt,{})'.format(jet,pt_calibs))
+                    self.a.Define('{}_msoftdrop_corr'.format(jet),'hardware::MultiHadamardProduct({}_msoftdrop,{})'.format(jet,mass_calibs))
+                else: #Assume dealing with a single jet and not a collection
+                    self.a.Define('{}_pt_corr'.format(jet),'%s_pt%s'%(jet,pt_calibs))
+                    self.a.Define('{}_msoftdrop_corr'.format(jet),'%s_msoftdrop%s'%(jet,mass_calibs))
+            else:
+                if jet == 'FatJet':
+                    self.a.Define('{}_pt_corr'.format(jet),'hardware::MultiHadamardProduct(%s_pt,{%s_JES_nom})'%(jet,jet))
+                    self.a.Define('{}_msoftdrop_corr'.format(jet),'hardware::MultiHadamardProduct(%s_msoftdrop,{%s_JES_nom})'%(jet,jet))
+                else: 
+                    self.a.Define('{}_pt_corr'.format(jet),'%s_pt * %s_JES_nom'%(jet,jet))
+                    self.a.Define('{}_msoftdrop_corr'.format(jet),'%s_msoftdrop * %s_JES_nom'%(jet,jet))
         return self.a.GetActiveNode()
 
-    def ApplyPNetReweight(self,Hbb_wp=0.98, Wqq_wp=0.8): # wp chosen to delineate Hbb pass/fail
-        if not self.a.isData:
-            if 'XHY' in self.setname:   # only run Hbb corrections on signal for now 
-                # Firt apply Hbb scale factors
-                # Get the efficiency map from the rootfile
-                Hbb_effmap = '../semileptonic/plots/HbbJets_particleNetHbb_Efficiencies/{}_{}_HbbJets_particleNetHbb_Efficiencies.root'.format(self.setname,self.year)
-                # the column names that will be used for the `eval()` function
-                Hbb_cols = ['Higgs_pt_corr', 'Higgs_eta', 'Higgs_particleNetMD_HbbvsQCD', 'Higgs_jetFlavor']
-                PNetHbbWeight = Correction('PNetHbbWeight', 'TIMBER/Framework/include/PNetHbb_weight.h', constructor=[str(self.year), Hbb_effmap, Hbb_wp], mainFunc='eval', corrtype='weight', columnList=Hbb_cols)
-                self.a.AddCorrection(PNetHbbWeight, evalArgs={'Higgs_pt':'Higgs_pt_corr', 'Higgs_eta':'Higgs_eta','Higgs_PNetHbbScore':'Higgs_particleNetMD_HbbvsQCD','Higgs_jetFlavor':'Higgs_jetFlavor'})
+    def make_other_efficiency_map(self, tagger, cats):
+        #Helper function to make efficiency map for "other" jet category - combines efficiency maps for multiple jet flavors
+        print('Making combined efficiency map for tagger {} and jet flavors {}'.format(tagger,cats))
+        all_hist = ROOT.TH2F('Jets all','Jets all'+';pt;eta',15,0,3000,12,-2.4,2.4)
+        tagged_hist = ROOT.TH2F('Jets tagged','Jets tagged'+';pt;eta',15,0,3000,12,-2.4,2.4)        
+        outfile_name = 'plots/ParticleNet_Efficiencies/{}_{}_otherJets_particleNet{}_Efficiencies.root'.format(self.setname,self.year,tagger)
+        outfile = ROOT.TFile.Open(outfile_name,'RECREATE')
+        for cat in cats:
+            infile = ROOT.TFile.Open('plots/ParticleNet_Efficiencies/{}_{}_{}Jets_particleNet{}_Efficiencies.root'.format(self.setname,self.year,cat,tagger),'READ')
+            inhist_all = infile.Get('Jets all')
+            inhist_tagged = infile.Get('Jets tagged')
+            all_hist.Add(inhist_all)
+            tagged_hist.Add(inhist_tagged)
+        ratio_hist = make_ratio_hist(tagged_hist,all_hist)
+        ratio_hist.SetName('ratio')
+        ratio_hist.SetTitle('ratio')
+   
+        outfile.cd()
+        all_hist.Write()
+        tagged_hist.Write()
+        ratio_hist.Write() 
 
+        return outfile_name
+
+    def ApplyPNetReweight(self,Hbb_wp=0.98, Wqq_wp=0.80): # wp chosen to delineate Hbb pass/fail
+        if 'XHY' in self.setname:
+            # Signal, apply "true" Higgs/W scale factors
+            # Get the efficiency map from the rootfile
+            Hbb_effmap = 'plots/ParticleNet_Efficiencies/{}_{}_HiggsJets_particleNetHbb_Efficiencies.root'.format(self.setname,self.year)
+            Wqq_effmap = 'plots/ParticleNet_Efficiencies/{}_{}_WJets_particleNetWqq_Efficiencies.root'.format(self.setname,self.year)
+            #column names for eval function
+            Hbb_cols = ['Higgs_pt_corr', 'Higgs_eta', 'Higgs_particleNetMD_HbbvsQCD', 'Higgs_jetFlavor']
+            Wqq_cols = ['Wqq_pt_corr', 'Wqq_eta', 'Wqq_particleNetMD_WqqvsQCD', 'Wqq_jetFlavor']
+
+            #Make scale factors/uncertainties
+            PNetHbb_HJ = Correction('PNetHbb_HJ','TIMBER/Framework/include/PNetHbb_weight.h',constructor=[str(self.year), Hbb_effmap, Hbb_wp, 4], mainFunc='eval', corrtype='weight', columnList=Hbb_cols)
+            self.a.AddCorrection(PNetHbb_HJ, evalArgs={'Higgs_pt':'Higgs_pt_corr', 'Higgs_eta':'Higgs_eta','Higgs_PNetHbbScore':'Higgs_particleNetMD_HbbvsQCD','Higgs_jetFlavor':'Higgs_jetFlavor'})
+            PNetWqq_WJ = Correction('PNetWqq_WJ','TIMBER/Framework/include/PNetWqq_weight.h',constructor=[str(self.year), Wqq_effmap, Wqq_wp, 1], mainFunc='eval', corrtype='weight', columnList=Wqq_cols)
+            self.a.AddCorrection(PNetWqq_WJ, evalArgs={'Wqq_pt':'Wqq_pt_corr', 'Wqq_eta':'Wqq_eta','Wqq_PNetWqqScore':'Wqq_particleNetMD_WqqvsQCD','Wqq_jetFlavor':'Wqq_jetFlavor'})
+
+        elif 'ttbar' in self.setname: 
+            # Apply top/bq scale factors for Hbb tagger, top/w/other(bq+unmerged) scale factors for w tagger
+            # Note: -1 jet index in the constructor denotes "other" (a combination of multiple flavors/indicies) 
+                # Indicies to consider as "other" can be changed by adding other = {idx1,idx2,etc...}
+                # Default indices: {1,3} (w, unmerged) for Hbb tagger, {2,3} (bq, unmerged for Wqq tagger)  
+
+            # Hbb scale factors
+            Hbb_cols = ['Higgs_pt_corr', 'Higgs_eta', 'Higgs_particleNetMD_HbbvsQCD', 'Higgs_jetFlavor']
+            Hbb_tJ_effmap = 'plots/ParticleNet_Efficiencies/{}_{}_TopJets_particleNetHbb_Efficiencies.root'.format(self.setname,self.year)
+            PNetHbb_tJ = Correction('PNetHbb_tJ', 'TIMBER/Framework/include/PNetHbb_weight.h', constructor=[str(self.year),Hbb_tJ_effmap,Hbb_wp,0],mainFunc='eval', corrtype='weight', columnList=Hbb_cols)
+            self.a.AddCorrection(PNetHbb_tJ, evalArgs={'Higgs_pt':'Higgs_pt_corr', 'Higgs_eta':'Higgs_eta','Higgs_PNetHbbScore':'Higgs_particleNetMD_HbbvsQCD','Higgs_jetFlavor':'Higgs_jetFlavor'})
+
+            Hbb_bqJ_effmap = 'plots/ParticleNet_Efficiencies/{}_{}_bqJets_particleNetHbb_Efficiencies.root'.format(self.setname,self.year)
+            PNetHbb_bqJ = Correction('PNetHbb_bqJ', 'TIMBER/Framework/include/PNetHbb_weight.h', constructor=[str(self.year),Hbb_bqJ_effmap,Hbb_wp,2],mainFunc='eval',corrtype='weight',columnList=Hbb_cols)
+            self.a.AddCorrection(PNetHbb_bqJ, evalArgs={'Higgs_pt':'Higgs_pt_corr', 'Higgs_eta':'Higgs_eta','Higgs_PNetHbbScore':'Higgs_particleNetMD_HbbvsQCD','Higgs_jetFlavor':'Higgs_jetFlavor'})
+            
             # Now do Wqq scale factors
-            Wqq_effmap = '../semileptonic/plots/WqqJets_particleNetWqq_Efficiencies/{}_{}_WqqJets_particleNetWqq_Efficiencies.root'.format(self.setname,self.year)
-            Wqq_cols = ['Wqq_pt_corr', 'Wqq_eta', 'Wqq_particleNetMD_WqqvsQCD', 'Higgs_jetFlavor']
-            PNetWqqWeight = Correction('PNetWqqWeight', 'TIMBER/Framework/include/PNetWqq_weight.h', constructor=[str(self.year), Wqq_effmap, Wqq_wp], mainFunc='eval', corrtype='weight', columnList=Wqq_cols)
-            self.a.AddCorrection(PNetWqqWeight, evalArgs={'Wqq_pt':'Wqq_pt_corr', 'Wqq_eta':'Wqq_eta','Wqq_PNetWqqScore':'Wqq_particleNetMD_WqqvsQCD','Higgs_jetFlavor':'Higgs_jetFlavor'})
+            Wqq_cols = ['Wqq_pt_corr', 'Wqq_eta', 'Wqq_particleNetMD_WqqvsQCD', 'Wqq_jetFlavor']
+            Wqq_tJ_effmap = 'plots/ParticleNet_Efficiencies/{}_{}_TopJets_particleNetWqq_Efficiencies.root'.format(self.setname,self.year)
+            PNetWqq_tJ = Correction('PNetWqq_tJ', 'TIMBER/Framework/include/PNetWqq_weight.h', constructor=[str(self.year),Wqq_tJ_effmap,Wqq_wp,0], mainFunc='eval', corrtype='weight', columnList=Wqq_cols)
+            self.a.AddCorrection(PNetWqq_tJ, evalArgs={'Wqq_pt':'Wqq_pt_corr', 'Wqq_eta':'Wqq_eta','Wqq_PNetWqqScore':'Wqq_particleNetMD_WqqvsQCD','Wqq_jetFlavor':'Wqq_jetFlavor'})
+
+            Wqq_WJ_effmap = 'plots/ParticleNet_Efficiencies/{}_{}_WJets_particleNetWqq_Efficiencies.root'.format(self.setname,self.year)
+            PNetWqq_WJ = Correction('PNetWqq_WJ', 'TIMBER/Framework/include/PNetWqq_weight.h', constructor=[str(self.year),Wqq_WJ_effmap,Wqq_wp,1], mainFunc='eval', corrtype='weight', columnList=Wqq_cols)
+            self.a.AddCorrection(PNetWqq_WJ, evalArgs={'Wqq_pt':'Wqq_pt_corr', 'Wqq_eta':'Wqq_eta','Wqq_PNetWqqScore':'Wqq_particleNetMD_WqqvsQCD','Wqq_jetFlavor':'Wqq_jetFlavor'})
+
+            Wqq_oJ_effmap = self.make_other_efficiency_map(tagger = 'Wqq', cats = ['bq','UM'])
+            PNetWqq_oJ = Correction('PNetWqq_oJ', 'TIMBER/Framework/include/PNetWqq_weight.h', constructor=[str(self.year),Wqq_oJ_effmap,Wqq_wp,-1],mainFunc='eval', corrtype='weight', columnList=Wqq_cols)
+            self.a.AddCorrection(PNetWqq_oJ, evalArgs={'Wqq_pt':'Wqq_pt_corr', 'Wqq_eta':'Wqq_eta','Wqq_PNetWqqScore':'Wqq_particleNetMD_WqqvsQCD','Wqq_jetFlavor':'Wqq_jetFlavor'})
+            
 
     def ApplyLeptonCorrections(self):
         if not self.a.isData:
             #Corrections for electron mva ID (wp80 no isolation)
             cols = ['Lepton_eta','Lepton_pt','LeptonType']
-            ele_filepath = '/uscms/home/mhesford/nobackup/XHYbbWW/CMSSW_12_3_0/src/semileptonic/corrections/electron_{}.json'.format(self.year) #path to json file - for constructor
+            ele_filepath = 'corrections/electron_{}.json'.format(self.year) #path to json file - for constructor
             ElectronIDWeight = Correction('ElectronIDWeight','TIMBER/Framework/include/ElectronID_weight.h',constructor=[str(self.year), "wp80noiso", ele_filepath], mainFunc='eval', corrtype='weight', columnList=cols)
             self.a.AddCorrection(ElectronIDWeight, evalArgs={'Lepton_eta':'Lepton_eta','Lepton_pt':'Lepton_pt','LeptonType':'LeptonType'})
 
@@ -226,13 +326,13 @@ class XHYbbWW:
             self.a.AddCorrection(ElectronRecoWeight, evalArgs={'Lepton_eta':'Lepton_eta','Lepton_pt':'Lepton_pt','LeptonType':'LeptonType'})
 
             #Apply muon ID corrections
-            muoID_filepath = '/uscms/home/mhesford/nobackup/XHYbbWW/CMSSW_12_3_0/src/semileptonic/corrections/ScaleFactors_Muon_highPt_IDISO_20{}_schemaV2.json'.format(self.year)
+            muoID_filepath = 'corrections/ScaleFactors_Muon_highPt_IDISO_20{}_schemaV2.json'.format(self.year)
             MuonIDWeight = Correction('MuonIDWeight','TIMBER/Framework/include/MuonID_weight.h',constructor=["NUM_MediumID_DEN_GlobalMuonProbes",muoID_filepath, 50, 1000], mainFunc='eval', corrtype='weight', columnList=cols) #same column list
             self.a.AddCorrection(MuonIDWeight, evalArgs={'Lepton_eta':'Lepton_eta','Lepton_pt':'Lepton_pt','LeptonType':'LeptonType'})
 
             #Muon reconstruction scale factors
             self.a.Define('Lepton_p','Lepton_pt*cosh(Lepton_eta)') #Muon reco scale factors indexed by p (not pt)
-            muoRECO_filepath = '/uscms/home/mhesford/nobackup/XHYbbWW/CMSSW_12_3_0/src/semileptonic/corrections/ScaleFactors_Muon_highPt_RECO_20{}_schemaV2.json'.format(self.year)
+            muoRECO_filepath = 'corrections/ScaleFactors_Muon_highPt_RECO_20{}_schemaV2.json'.format(self.year)
             muoRECO_cols = ['Lepton_eta','Lepton_p','LeptonType']
             MuonRecoWeight = Correction('MuonRecoWeight','TIMBER/Framework/include/MuonID_weight.h',constructor=["NUM_GlobalMuons_DEN_TrackerMuonProbes",muoRECO_filepath, 50, 3500], mainFunc='eval', corrtype='weight', columnList=muoRECO_cols)
             self.a.AddCorrection(MuonRecoWeight, evalArgs={'Lepton_eta':'Lepton_eta','Lepton_pt':'Lepton_p','LeptonType':'LeptonType'})
@@ -246,16 +346,20 @@ class XHYbbWW:
         return lumi*xsec/self.a.genEventSumw
 
     # for trigger efficiencies
-    def ApplyTrigs(self):
+    def ApplyTrigs(self,ApplyLeptonTrigs=True):
         #For now, just apply triggers straight up
         #Eventually, once trigger efficiencies in data measured, can just apply them as a weight correction to MC
         all_trigs = self.trigs[self.year if 'APV' not in self.year else '16']
-        trigs = []
-        for group in ['HADRONIC','ELECTRON','MUON']:
-            for trig in all_trigs[group]:
-                trigs.append(trig)
-        print('Trigger list: {}'.format(trigs))
-        self.a.Cut('trigger',self.a.GetTriggerString(trigs))
+        h_trigs = all_trigs['HADRONIC']
+        print('Hadronic trigger list: {}'.format(h_trigs))
+        self.a.Cut('h_trigger',self.a.GetTriggerString(h_trigs))
+        if ApplyLeptonTrigs:
+            l_trigs = []
+            for group in ['ELECTRON','MUON']:
+                for trig in all_trigs[group]:
+                    l_trigs.append(trig)
+            print('Leptonic trigger list: {}'.format(l_trigs))
+            self.a.Cut('l_trigger',self.a.GetTriggerString(l_trigs))
         self.nTrigs = self.getNweighted()
         self.AddCutflowColumn(self.nTrigs, "nTrigs")
         return self.a.GetActiveNode()
@@ -301,7 +405,7 @@ class XHYbbWW:
         self.a.Define('FatJet_particleNetMD_WqqvsQCD','(FatJet_particleNetMD_Xqq+FatJet_particleNetMD_Xcc)/(FatJet_particleNetMD_Xqq+FatJet_particleNetMD_Xcc+FatJet_particleNetMD_QCD)')
 
         #Pick two highest pt back to back fat jets
-        self.a.Define('DijetIdxs','PickDijets(FatJet_pt,FatJet_eta,FatJet_phi,FatJet_msoftdrop)')
+        self.a.Define('DijetIdxs','PickDijets(FatJet_pt_corr,FatJet_eta,FatJet_phi,FatJet_msoftdrop_corr)')
         self.a.Cut('Dijets_exist','DijetIdxs[0] != -1 && DijetIdxs[1] != -1')
 
         self.nDijets = self.getNweighted()
@@ -315,8 +419,8 @@ class XHYbbWW:
             # 2: Merged Higgs jet
             # 3: Unmerged jet (other)
         # Setup to work for signal and ttbar only
-        if self.a.isData == False:
-            self.a.Define('Dijet_jetFlavor', 'JetFlavor_{}(Dijet_eta, Dijet_phi, GenPart_eta, GenPart_phi, GenPart_pdgId, GenPart_genPartIdxMother)'.format('signal' if 'XHY' in self.setname else 'ttbar'))
+        if not self.a.isData:
+            self.a.Define('Dijet_jetFlavor', 'JetFlavor_{}_vec(Dijet_eta, Dijet_phi, GenPart_eta, GenPart_phi, GenPart_pdgId, GenPart_genPartIdxMother)'.format('signal' if 'XHY' in self.setname else 'ttbar'))
 
         #mark one jet as Higgs and other as Wqq
         self.a.Define('WqqIdx','Dijet_particleNetMD_WqqvsQCD[0] > Dijet_particleNetMD_WqqvsQCD[1] ? 0 : 1')
@@ -523,17 +627,43 @@ class XHYbbWW:
         return stdInts
 
 # for use in selection - essentially just creates combinations of all the JME variations
-def JMEvariationStr(p, variation):
-    base_calibs = ['FatJet_JES_nom','FatJet_JER_nom','FatJet_JMS_nom','FatJet_JMR_nom']
+def JMEvariationStr(p, jet, variation):
+    base_calibs = ['{}_JES_nom'.format(jet),'{}_JER_nom'.format(jet),'{}_JMS_nom'.format(jet),'{}_JMR_nom'.format(jet)]
     variationType = variation.split('_')[0]
-    pt_calib_vect = '{'
-    mass_calib_vect = '{'
-    for c in base_calibs:
-        if 'JM' in c and p != 'Top':	# WARNING - might need to change this if we treat W, H differently for mass and pt calibrations  
-            mass_calib_vect += '%s,'%('FatJet_'+variation if variationType in c else c)
-        elif 'JE' in c:
-            pt_calib_vect += '%s,'%('FatJet_'+variation if variationType in c else c)
-            mass_calib_vect += '%s,'%('FatJet_'+variation if variationType in c else c)
-    pt_calib_vect = pt_calib_vect[:-1]+'}'
-    mass_calib_vect = mass_calib_vect[:-1]+'}'
-    return pt_calib_vect, mass_calib_vect
+    if jet == 'FatJet': #RVec quantities, set up the vector for a multi-hadamard product
+        pt_calib_str = '{'
+        mass_calib_str = '{'
+        for c in base_calibs:
+            if 'JM' in c and p != 'Top':	# WARNING - might need to change this if we treat W, H differently for mass and pt calibrations 
+                mass_calib_str += '%s,'%(jet+'_'+variation if variationType in c else c)
+            elif 'JE' in c:
+                pt_calib_str += '%s,'%(jet+'_'+variation if variationType in c else c)
+                mass_calib_str += '%s,'%(jet+'_'+variation if variationType in c else c)
+        pt_calib_str += '}'
+        mass_calib_str += '}'
+    else: #Assuming input is a single jet and not a collection - create a string to multiply all the relevant calibrations
+        pt_calib_str = ''
+        mass_calib_str = ''
+        for c in base_calibs:
+            if 'JM' in c and p != 'Top':        # WARNING - might need to change this if we treat W, H differently for mass and pt calibrations 
+                mass_calib_str += '*%s'%(jet+'_'+variation if variationType in c else c)
+            elif 'JE' in c:
+                pt_calib_str += '*%s'%(jet+'_'+variation if variationType in c else c)
+                mass_calib_str += '*%s'%(jet+'_'+variation if variationType in c else c)
+
+    return pt_calib_str, mass_calib_str
+
+# helper function to make the ratio of two 2D histograms
+def make_ratio_hist(histN,histD):
+    ratio_hist = histN.Clone('ratio_hist') #New histogram - ratio of (tagged jets)/(all jets) per bin
+    #Loop over all bins, manually calculate ratios + set the bin contents of new histogram (I don't think there is a better way to do this for TH2?)
+    for x in range(1,ratio_hist.GetNbinsX()+1):
+        for y in range(1,ratio_hist.GetNbinsY()+1):
+            val_tagged = histN.GetBinContent(x,y)
+            val_all = histD.GetBinContent(x,y)
+            if val_all == 0:
+                ratio = 0
+            else:
+                ratio = val_tagged/val_all
+            ratio_hist.SetBinContent(x,y,ratio)
+    return ratio_hist
