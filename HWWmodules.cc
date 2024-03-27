@@ -21,7 +21,7 @@ RVec<int> PickDijets(RVec<float> pt, RVec<float> eta, RVec<float> phi, RVec<floa
     }
     // now loop over the remaining jets,
     for (int ijet=jet0Idx+1; ijet<eta.size(); ijet++) {
-        if (std::abs(eta[ijet]) < 2.4 && mass[ijet] > 50 && pt[ijet] > 200) {
+        if (std::abs(eta[ijet]) < 2.4 && mass[ijet] > 50 && pt[ijet] > 300) {
             jet1Idx = ijet;
             break;
         }
@@ -223,7 +223,7 @@ int JetFlavor_ttbar(float Jet_eta, float Jet_phi, RVec<float> Gen_eta, RVec<floa
             if (n_bfromt >= 1) {jetId = 0;} // merged top jet
             else {jetId = 1;} // merged W jet
         }
-        else if (n_bfromt >= 1) {jetId = 3;} // bq jet        
+        else if (n_bfromt >= 1) {jetId = 2;} // bq jet        
     }
     return jetId;
 }
@@ -267,14 +267,14 @@ RVec<int> JetFlavor_ttbar_vec(RVec<float> Jet_eta, RVec<float> Jet_phi, RVec<flo
                 if (n_bfromt >= 1) {flav = 0;} // merged top jet
                 else {flav = 1;} // merged W jet
             }
-            else if (n_bfromt >= 1) {flav = 3;} // bq jet        
+            else if (n_bfromt >= 1) {flav = 2;} // bq jet        
         }
         jetId[ijet] = flav;
     }
     return jetId;
 }
 
-RVec<int> JetFlavor_signal(RVec<float> Jet_eta, RVec<float> Jet_phi, RVec<float> Gen_eta, RVec<float> Gen_phi, RVec<int> pdgId, RVec<int> motherIdx) {
+RVec<int> JetFlavor_signal_vec(RVec<float> Jet_eta, RVec<float> Jet_phi, RVec<float> Gen_eta, RVec<float> Gen_phi, RVec<int> pdgId, RVec<int> motherIdx) {
     // EXPERIMENTAL: Assigns true flavor to signal MC AK8 jets based on gen particles inside the jet cone (R=0.8): 
     // Output: an RVec of numbers corresponding to jet flavors
     //     1: merged Wqq jet
