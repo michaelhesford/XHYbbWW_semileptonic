@@ -13,6 +13,9 @@ def KinPlots(self):
 
     ### DEFINITIONS ###
 
+    #JEC corrections
+    self.ApplyJMECorrections(variation='None')
+
     #For starters, we will take the two highest pt jets to be our objects of interest
     self.a.Define('DijetIdxs','ROOT::VecOps::RVec({0,1})')
     self.a.SubCollection('Dijet','FatJet','DijetIdxs',useTake=True)
@@ -23,12 +26,6 @@ def KinPlots(self):
     self.a.Define('FatJet_particleNetMD_HbbvsQCD','FatJet_particleNetMD_Xbb/(FatJet_particleNetMD_Xbb+FatJet_particleNetMD_QCD)')
     self.a.Define('FatJet_particleNetMD_WqqvsQCD','(FatJet_particleNetMD_Xqq+FatJet_particleNetMD_Xcc)/(FatJet_particleNetMD_Xqq+FatJet_particleNetMD_Xcc+FatJet_particleNetMD_QCD)')
     
-    self.ApplyJMECorrections(variation='None')
-
-    #I accidentally didn't cut on this info in the snapshot phase, do it now to ensure 2 fat jets
-    self.a.Define('isJetPre','isJetPreselected(nFatJet,FatJet_pt,FatJet_eta,FatJet_msoftdrop,nJet,Jet_pt,Jet_eta,false)')
-    self.a.Cut('isJetPreselected','isJetPre')
-
     #mark one jet as Higgs and other as Wqq
     self.a.Define('HiggsIdx','FatJet_particleNetMD_HbbvsQCD[0] > FatJet_particleNetMD_HbbvsQCD[1] ? 0 : 1')
     self.a.Define('WqqIdx','HiggsIdx == 0 ? 1 : 0')
@@ -36,11 +33,6 @@ def KinPlots(self):
     self.a.ObjectFromCollection('Higgs','FatJet','HiggsIdx')
     self.a.ObjectFromCollection('Wqq','FatJet','WqqIdx')
 
-    #self.Dijets()
-
-    self.ApplyStandardCorrections(snapshot=False)
-    self.a.MakeWeightCols(extraNominal='') #apply corrections 
-    
     #We will also take only the highest pt lepton
     self.a.Define('LeptonType','leptonType_studies(Electron_pt, Muon_pt)') #output: 0 - electron event OR 1 - muon event   
     self.a.Define('Lepton_pt','LeptonType == 1 ? Muon_pt[0] : Electron_pt[0]')
@@ -49,25 +41,36 @@ def KinPlots(self):
     self.a.Define('Lepton_mass','LeptonType == 1 ? Muon_mass[0] : Electron_mass[0]')
     self.a.Define('Lepton_miniPFRelIso_all','LeptonType == 1 ? Muon_miniPFRelIso_all[0] : Electron_miniPFRelIso_all[0]')
     
-    #Lorentz 4-vectors
-    self.a.Define('MET_vect','hardware::TLvector(ChsMET_pt,0,ChsMET_phi,0)') #neutrino mass negligable, for now assuming MET_eta = 0 (p_z = 0)
-    self.a.Define('Lepton_vect','hardware::TLvector(Lepton_pt,Lepton_eta,Lepton_phi,Lepton_mass)')
-    #self.a.Define('Wqq_vect','hardware::TLvector(Wqq_pt,Wqq_eta,Wqq_phi,Wqq_msoftdrop)')
-    #self.a.Define('Higgs_vect','hardware::TLvector(Higgs_pt,Higgs_eta,Higgs_phi,Higgs_msoftdrop)')
+    #Make columns for corrections/reweights
+    self.ApplyStandardCorrections(snapshot=False)
+    self.ApplyTopPtReweight('Higgs','Wqq',scale = 1, isJet1AK4 = False)
+    self.ApplyLeptonCorrections()
 
+    # Check which corrections are being tracked
+    print('Tracking corrections: \n%s'%('\n\t- '.join(list(self.a.GetCorrectionNames()))))
+    
+    # Apply corrections and normalization
+    self.a.MakeWeightCols(correctionNames=list(self.a.GetCorrectionNames()),extraNominal='' if self.a.isData else str(self.GetXsecScale()))
+    
+    #Lorentz 4-vectors
+    self.a.Define('MET_vect','hardware::TLvector(MET_pt,0,MET_phi,0)') #neutrino mass negligable, for now assuming MET_eta = 0 (p_z = 0)
+    self.a.Define('Lepton_vect','hardware::TLvector(Lepton_pt,Lepton_eta,Lepton_phi,Lepton_mass)')
     self.a.Define('Wqq_vect','hardware::TLvector(Wqq_pt_corr,Wqq_eta,Wqq_phi,Wqq_msoftdrop_corr)')
     self.a.Define('Higgs_vect','hardware::TLvector(Higgs_pt_corr,Higgs_eta,Higgs_phi,Higgs_msoftdrop_corr)')
     
     #Define some delta phi variables
-    self.a.Define('DeltaPhi_Higgs_Wqq','hardware::DeltaPhi(Higgs_phi,Wqq_phi)')    
-    self.a.Define('DeltaPhi_Lepton_MET','hardware::DeltaPhi(Lepton_phi,MET_phi)')
-    self.a.Define('DeltaPhi_Lepton_Higgs','hardware::DeltaPhi(Lepton_phi,Higgs_phi)')
-    self.a.Define('DeltaPhi_Lepton_Wqq','hardware::DeltaPhi(Lepton_phi,Wqq_phi)')
+    self.a.Define('DeltaPhi_Higgs_Wqq','abs(hardware::DeltaPhi(Higgs_phi,Wqq_phi))')    
+    self.a.Define('DeltaPhi_Lepton_MET','abs(hardware::DeltaPhi(Lepton_phi,MET_phi))')
+    self.a.Define('DeltaPhi_Lepton_Higgs','abs(hardware::DeltaPhi(Lepton_phi,Higgs_phi))')
+    self.a.Define('DeltaPhi_Lepton_Wqq','abs(hardware::DeltaPhi(Lepton_phi,Wqq_phi))')
 
-    #Now look at Delta R
+    #Now look at delta R
     self.a.Define('DeltaR_Higgs_Wqq','hardware::DeltaR(Higgs_vect,Wqq_vect)')
     self.a.Define('DeltaR_Lepton_Higgs','hardware::DeltaR(Lepton_vect,Higgs_vect)')
     self.a.Define('DeltaR_Lepton_Wqq','hardware::DeltaR(Lepton_vect,Wqq_vect)')
+
+    #Delta eta is feeling left out
+    self.a.Define('DeltaEta_Higgs_Wqq','std::abs(Higgs_eta - Wqq_eta)')
 
     ###################
     
@@ -79,15 +82,15 @@ def KinPlots(self):
     kinPlots.Add('Sublead_pt',self.a.GetActiveNode().DataFrame.Histo1D(('Sublead_pt','Sublead_pt',36,200,2000),'Sublead_pt','weight__nominal'))
     kinPlots.Add('DeltaPhi_Higgs_Wqq',self.a.GetActiveNode().DataFrame.Histo1D(('DeltaPhi_Higgs_Wqq','DeltaPhi_Higgs_Wqq',30,0,3.2),'DeltaPhi_Higgs_Wqq','weight__nominal'))
     kinPlots.Add('DeltaR_Higgs_Wqq',self.a.GetActiveNode().DataFrame.Histo1D(('DeltaR_Higgs_Wqq','DeltaR_Higgs_Wqq',50,0,5),'DeltaR_Higgs_Wqq','weight__nominal'))
-    kinPlots.Add('Higgs_msoftdrop',self.a.GetActiveNode().DataFrame.Histo1D(('Higgs_msoftdrop','Higgs_msoftdrop',40,50,250),'Higgs_msoftdrop','weight__nominal'))
-    kinPlots.Add('Wqq_msoftdrop',self.a.GetActiveNode().DataFrame.Histo1D(('Wqq_msoftdrop','Wqq_msoftdrop',40,50,250),'Wqq_msoftdrop','weight__nominal'))
+    kinPlots.Add('DeltaEta_Higgs_Wqq',self.a.GetActiveNode().DataFrame.Histo1D(('DeltaEta_Higgs_Wqq','DeltaEta_Higgs_Wqq',50,0,5),'DeltaEta_Higgs_Wqq','weight__nominal'))
+    kinPlots.Add('Higgs_msoftdrop_corr',self.a.GetActiveNode().DataFrame.Histo1D(('Higgs_msoftdrop_corr','Higgs_msoftdrop_corr',40,50,250),'Higgs_msoftdrop_corr','weight__nominal'))
+    kinPlots.Add('Wqq_msoftdrop_corr',self.a.GetActiveNode().DataFrame.Histo1D(('Wqq_msoftdrop_corr','Wqq_msoftdrop_corr',40,50,250),'Wqq_msoftdrop_corr','weight__nominal'))
     
     #Make separate kinematic plots for electron/muon events
     eleEvents=self.a.Cut('eleEvents','LeptonType == 0')
     self.a.SetActiveNode(eleEvents)
-
-    kinPlots.Add('Electron_pt',self.a.GetActiveNode().DataFrame.Histo1D(('Electron_pt','Electron_pt',50,10,1000),'Lepton_pt','weight__nominal'))
     
+    kinPlots.Add('Electron_pt',self.a.GetActiveNode().DataFrame.Histo1D(('Electron_pt','Electron_pt',50,10,1000),'Lepton_pt','weight__nominal'))
     kinPlots.Add('DeltaPhi_Electron_Higgs',self.a.GetActiveNode().DataFrame.Histo1D(('DeltaPhi_Electron_Higgs','DeltaPhi_Electron_Higgs',30,0,3.2),'DeltaPhi_Lepton_Higgs','weight__nominal'))
     kinPlots.Add('DeltaPhi_Electron_Wqq',self.a.GetActiveNode().DataFrame.Histo1D(('DeltaPhi_Electron_Wqq','DeltaPhi_Electron_Wqq',30,0,3.2),'DeltaPhi_Lepton_Wqq','weight__nominal'))
     kinPlots.Add('DeltaR_Electron_Higgs',self.a.GetActiveNode().DataFrame.Histo1D(('DeltaR_Electron_Higgs','DeltaR_Electron_Higgs',50,0,5),'DeltaR_Lepton_Higgs','weight__nominal'))
@@ -105,29 +108,29 @@ def KinPlots(self):
     
     self.a.SetActiveNode(start)
     
-    return kinPlots
-    
-    return self.a.GetActiveNode() 
+    return kinPlots    
 
 def Nminus1Group(t):
     NCuts=CutGroup('NCuts')
     #Cuts to apply for all plots - will make N-1 for all of these (except lepton quality)
     NCuts.Add('Lepton_pt','Lepton_pt > 25')
     NCuts.Add('Lepton_eta','LeptonType == 0? Lepton_eta < 2.5 : Lepton_eta < 2.4')
-    NCuts.Add('Lead_pt','Lead_pt > 300')
-    NCuts.Add('Sublead_pt','Sublead_pt > 200')
+    NCuts.Add('Lead_pt_corr','Lead_pt_corr > 400')
+    NCuts.Add('Sublead_pt_corr','Sublead_pt_corr > 300')
     NCuts.Add('Higgs_eta','abs(Higgs_eta) < 2.4')
     NCuts.Add('Wqq_eta','abs(Wqq_eta) < 2.4')
     NCuts.Add('Lepton_miniPFRelIso_all','Lepton_miniPFRelIso_all < 0.1')    
-    NCuts.Add('LeptonQuality','LeptonType == 0? Electron_mvaFall17V2noIso_WP80[0] : Muon_mediumId[0]')
-    NCuts.Add('Higgs_msoftdrop','Higgs_msoftdrop > 100 && Higgs_msoftdrop < 145')
-    NCuts.Add('Higgs_{}_HbbvsQCD'.format(t),'Higgs_{}_HbbvsQCD > 0.94'.format(t))
-    NCuts.Add('Wqq_msoftdrop','Wqq_msoftdrop > 65 && Wqq_msoftdrop < 100')
+    NCuts.Add('LeptonQuality','LeptonType == 0? Electron_mvaFall17V2noIso_WP90[0] : Muon_mediumId[0]')
+    NCuts.Add('Higgs_msoftdrop_corr','Higgs_msoftdrop_corr > 100 && Higgs_msoftdrop_corr < 145')
+    NCuts.Add('Higgs_{}_HbbvsQCD'.format(t),'Higgs_{}_HbbvsQCD > 0.98'.format(t))
+    NCuts.Add('Wqq_msoftdrop_corr','Wqq_msoftdrop_corr > 65 && Wqq_msoftdrop_corr < 95')
     NCuts.Add('Wqq_{}_WqqvsQCD'.format(t),'Wqq_{}_WqqvsQCD > 0.8'.format(t))    
     #NCuts.Add('DeltaR_Lepton_Higgs','abs(DeltaR_Lepton_Higgs) > 0.8')
-    NCuts.Add('DeltaPhi_Lepton_Higgs','abs(DeltaPhi_Lepton_Higgs) > 0.5')
+    NCuts.Add('MET_pt','MET_pt > 25')
+    NCuts.Add('DeltaPhi_Higgs_Wqq','DeltaPhi_Higgs_Wqq < 3') #jets more back to back in ttbar than signal
+    #NCuts.Add('DeltaEta_Higgs_Wqq','DeltaEta_Higgs_Wqq < 1.3') #experimental, increases efficiency of JetHT triggers
+    #NCuts.Add('DeltaPhi_Lepton_Higgs','abs(DeltaPhi_Lepton_Higgs) > 0.5')
     #NCuts.Add('DeltaPhi_Lepton_Wqq','abs(DeltaPhi_Lepton_Wqq) > 1 && abs(DeltaPhi_Lepton_Wqq) < 2.5')
-    #NCuts.Add('DeltaPhi_Higgs_Wqq','abs(DeltaPhi_Higgs_Wqq) > 1.571')
 
     return NCuts
 
@@ -142,6 +145,9 @@ def Nminus1Plots(self):
     self.a.Define('W_massInv','hardware::InvariantMass({MET_vect,Lepton_vect})') #full invariant mass
     self.a.Define('Y_mass','hardware::InvariantMass({Lepton_vect,MET_vect,Wqq_vect})')
     self.a.Define('X_mass','hardware::InvariantMass({Lepton_vect,MET_vect,Wqq_vect,Higgs_vect})')
+
+    #Dijet invariant mass
+    self.a.Define('mjj','hardware::InvariantMass({Higgs_vect,Wqq_vect})')
 
     nminus1Plots = HistGroup('nminus1Plots')
 
@@ -158,25 +164,28 @@ def Nminus1Plots(self):
             'Lepton_pt':[50,10,1000],
             'Lepton_eta':[40,-3,3],
             'Lepton_miniPFRelIso_all':[20,0,1],
-            'Lead_pt':[34,300,2000],
-            'Sublead_pt':[36,200,2000],
-            'Higgs_msoftdrop':[40,50,250],
+            'Lead_pt_corr':[34,300,2000],
+            'Sublead_pt_corr':[36,200,2000],
+            'Higgs_msoftdrop_corr':[40,50,250],
             'Higgs_{}_HbbvsQCD'.format(t):[50,0,1],
             'Higgs_eta':[40,-3,3],
-            'Wqq_msoftdrop':[40,50,250],
+            'Wqq_msoftdrop_corr':[40,50,250],
             'Wqq_{}_WqqvsQCD'.format(t):[50,0,1],
             'Wqq_eta':[40,-3,3],
-            'DeltaPhi_Lepton_Higgs':[30,0,3.2],
-            'full':
-                {'W_massTran':[30,0,500],
+            'DeltaPhi_Higgs_Wqq':[30,0,3.2],
+            'MET_pt':[40,0,1000],
+            'full': {
+                 'W_massTran':[30,0,500],
                  'W_massInv':[30,0,500],
                  'X_mass':[76,600,4400],
                  'Y_mass':[60,100,3000],
-                 'DeltaPhi_Higgs_Wqq':[30,0,3.2],
+                 'mjj':[76,600,4400],
                  'DeltaPhi_Lepton_Wqq':[30,0,3.2],
-                 'DeltaR_Lepton_Higgs':[50,0,5],
+                 'DeltaPhi_Lepton_Higgs':[30,0,3.2],
                  'DeltaR_Higgs_Wqq':[50,0,5],
-                 'DeltaR_Lepton_Wqq':[50,0,5]
+                 'DeltaR_Lepton_Wqq':[50,0,5],
+                 'DeltaR_Lepton_Higgs':[50,0,5],
+                 'DeltaEta_Higgs_Wqq':[50,0,5]
             }
         }
 
@@ -214,17 +223,15 @@ if __name__ == "__main__":
 
     filename = 'snapshots/{}_{}_snapshot.txt'.format(setname,year) 
     ana = XHYbbWW(filename,ijob,njobs)
-    ana.ApplyTrigs()
-
-    #ana.ApplyStandardCorrections(snapshot=False)
-    #ana.a.MakeWeightCols(extraNominal='') #apply corrections 
-
-    outFile = ROOT.TFile.Open('{}_{}_{}_{}_studies.root'.format(setname,year,ijob,njobs),'RECREATE')
-    outFile.cd()
 
     kinPlots = KinPlots(ana)
-    kinPlots.Do('Write')
     nminus1Plots = Nminus1Plots(ana) 
+
+    #outFile = ROOT.TFile.Open('{}_{}_{}_{}_studies.root'.format(setname,year,ijob,njobs),'RECREATE')
+    outFile = ROOT.TFile.Open('{}_{}_studies.root'.format(setname,year),'RECREATE')
+    outFile.cd()
+
+    kinPlots.Do('Write')
     nminus1Plots.Do('Write')
 
     outFile.Close()
