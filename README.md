@@ -10,10 +10,14 @@ Description: Semileptonic $X \to HY \to bbWW$ analysis, with $W^+W^- \to \ell \n
 i) Use `condor/tar_env.sh` to create a tarball of the current environment and store it in the EOS.
 
 ii) Create a symlink to the TIMBER condorHelper script: 
-`ln -s $TIMBERPATH/TIMBER/Utilities/Condor/CondorHelper.py`
+```
+ln -s $TIMBERPATH/TIMBER/Utilities/Condor/CondorHelper.py
+```
 
 iii) To submit jobs using condor: 
-`python CondorHelper.py -r <RUN SCRIPT>.sh -a <ARGUMENTS FILE>.txt -i "<LOCAL SCRIPTS>"`
+```
+python CondorHelper.py -r <RUN SCRIPT>.sh -a <ARGUMENTS FILE>.txt -i "<LOCAL SCRIPTS>"
+```
 
 The `-i` option is used to incorporate any scripts which have been created/modified since the last time the environment tarball was updated.
 
