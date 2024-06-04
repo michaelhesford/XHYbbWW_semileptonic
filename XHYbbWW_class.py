@@ -167,23 +167,81 @@ class XHYbbWW:
                 # NOTE: LumiFilter requires the year as an integer 
                 lumiFilter = ModuleWorker('LumiFilter','TIMBER/Framework/include/LumiFilter.h',[int(self.year) if 'APV' not in self.year else 16])    # defaults to perform "eval" method 
                 self.a.Cut('lumiFilter',lumiFilter.GetCall(evalArgs={"lumi":"luminosityBlock"}))	       # replace lumi with luminosityBlock
-                #if self.year == '18':
-                    #HEM_worker = ModuleWorker('HEM_drop','TIMBER/Framework/include/HEM_drop.h',[self.setname if 'Muon' not in self.setname else self.setname[10:]])
-                    #self.a.Cut('HEM','%s[0] > 0'%(HEM_worker.GetCall(evalArgs={"FatJet_eta":"FatJet_eta","FatJet_phi":"FatJet_phi"})))
+                if self.year == '18':
+                    HEM_worker = ModuleWorker('HEM_drop','TIMBER/Framework/include/HEM_drop.h',[self.setname if 'Data' not in self.setname else self.setname[-5:]])
+                    self.a.Cut('HEM','%s[0] > 0'%(HEM_worker.GetCall(evalArgs={"FatJet_eta":"FatJet_eta","FatJet_phi":"FatJet_phi"})))
             else:
                 self.a = ApplyPU(self.a, 'XHYbbWWpileup.root', '20{}'.format(self.year), ULflag=True, histname='{}_{}'.format(self.setname,self.year))
-                self.a.AddCorrection(Correction('Pdfweight','TIMBER/Framework/include/PDFweight_uncert.h',[self.a.lhaid],corrtype='uncert'))
+                if self.a.lhaid != -1: #some backgrounds (diboson) don't have LHA ID in MC file
+                    self.a.AddCorrection(Correction('Pdfweight','TIMBER/Framework/include/PDFweight_uncert.h',[self.a.lhaid],corrtype='uncert'))
                 if self.year == '16' or self.year == '17' or 'APV' in self.year:
                     L1PreFiringWeight = Correction("L1PreFiringWeight","TIMBER/Framework/Zbb_modules/BranchCorrection.cc",constructor=[],mainFunc='evalWeight',corrtype='weight',columnList=['L1PreFiringWeight_Nom','L1PreFiringWeight_Up','L1PreFiringWeight_Dn'])
                     self.a.AddCorrection(L1PreFiringWeight, evalArgs={'val':'L1PreFiringWeight_Nom','valUp':'L1PreFiringWeight_Up','valDown':'L1PreFiringWeight_Dn'})
-                #elif self.year == '18':
-                    #self.a.AddCorrection(Correction('HEM_drop','TIMBER/Framework/include/HEM_drop.h',[self.setname],corrtype='corr'))
-            self.a = AutoJME.AutoJME(self.a, 'FatJet', '20{}'.format(self.year), self.setname if 'Muon' not in self.setname else self.setname[10:])
+                elif self.year == '18':
+                    self.a.AddCorrection(Correction('HEM_drop','TIMBER/Framework/include/HEM_drop.h',[self.setname],corrtype='corr'))
+
+                # Parton shower weights 
+                #	- https://twiki.cern.ch/twiki/bin/viewauth/CMS/TopSystematics#Parton_shower_uncertainties
+                #	- "Default" variation: https://twiki.cern.ch/twiki/bin/view/CMS/HowToPDF#Which_set_of_weights_to_use
+                #	- https://github.com/mroguljic/Hgamma/blob/409622121e8ab28bc1072c6d8981162baf46aebc/templateMaker.py#L210
+                self.a.Define("ISR__up","PSWeight[2]")
+                self.a.Define("ISR__down","PSWeight[0]")
+                self.a.Define("FSR__up","PSWeight[3]")
+                self.a.Define("FSR__down","PSWeight[1]")
+                genWCorr = Correction('genW','TIMBER/Framework/Zbb_modules/BranchCorrection.cc',corrtype='corr',mainFunc='evalCorrection') # workaround so we can have multiple BCs
+                self.a.AddCorrection(genWCorr, evalArgs={'val':'genWeight'})
+                #ISRcorr = Correction('ISRunc', 'TIMBER/Framework/TopPhi_modules/BranchCorrection.cc', mainFunc='evalUncert', corrtype='uncert')
+                #FSRcorr = Correction('FSRunc', 'TIMBER/Framework/TopPhi_modules/BranchCorrection.cc', mainFunc='evalUncert', corrtype='uncert')
+                ISRcorr = genWCorr.Clone("ISRunc",newMainFunc="evalUncert",newType="uncert")
+                FSRcorr = genWCorr.Clone("FSRunc",newMainFunc="evalUncert",newType="uncert")
+                self.a.AddCorrection(ISRcorr, evalArgs={'valUp':'ISR__up','valDown':'ISR__down'})
+                self.a.AddCorrection(FSRcorr, evalArgs={'valUp':'FSR__up','valDown':'FSR__down'})
+                # QCD factorization and renormalization corrections (only to non-signal MC)
+                if (('WW' not in self.setname) and ('WZ' not in self.setname) and ('ZZ' not in self.setname)):
+                    # First instatiate a correction module for the factorization correction
+                    facCorr = Correction('QCDscale_factorization','LHEScaleWeights.cc',corrtype='weight',mainFunc='evalFactorization')
+                    self.a.AddCorrection(facCorr, evalArgs={'LHEScaleWeights':'LHEScaleWeight'})
+                    # Now clone it and call evalRenormalization for the renormalization correction
+                    renormCorr = facCorr.Clone('QCDscale_renormalization',newMainFunc='evalRenormalization',newType='weight')
+                    self.a.AddCorrection(renormCorr, evalArgs={'LHEScaleWeights':'LHEScaleWeight'})
+                    # Now do one for the combined correction
+                    combCorr = facCorr.Clone('QCDscale_combined',newMainFunc='evalCombined',newType='weight')
+                    self.a.AddCorrection(combCorr, evalArgs={'LHEScaleWeights':'LHEScaleWeight'})
+                    # And finally, do one for the uncertainty
+                    # See: https://indico.cern.ch/event/938672/contributions/3943718/attachments/2073936/3482265/MC_ContactReport_v3.pdf (slide 27)
+                    QCDScaleUncert = facCorr.Clone('QCDscale_uncert',newMainFunc='evalUncert',newType='uncert')
+                    self.a.AddCorrection(QCDScaleUncert, evalArgs={'LHEScaleWeights':'LHEScaleWeight'})
+
+            if 'Data' not in self.setname:
+                JMEname = self.setname
+            elif 'DataB' in self.setname: #account for extra v1/v2 at the end of the setname
+                JMEname = 'DataB'
+            else:
+                JMEname = self.setname[-5:]
+            self.a = AutoJME.AutoJME(self.a, 'FatJet', '20{}'.format(self.year), JMEname)
+
         # now for selection
         else:
             if not self.a.isData:
+                # I forgot to add the `genW` branch in snapshots, so just redo it here...
+                # In the end it doesn't really matter, since the correction just uses genWeight.
+                # One could also opt to add genWeight*GetXsecScale() in the MakeWeightCols() call as well..
+                # This is EXTREMELY IMPORTANT for getting the event weighting correct
+                genWCorr = Correction('genW','TIMBER/Framework/Zbb_modules/BranchCorrection.cc',corrtype='corr',mainFunc='evalCorrection')
+                #self.a.AddCorrection(Correction('genW',corrtype='corr'))
+                self.a.AddCorrection(genWCorr, evalArgs={'val':'genWeight'})
+
                 self.a.AddCorrection(Correction('Pileup',corrtype='weight'))
                 self.a.AddCorrection(Correction('Pdfweight',corrtype='uncert'))                
+                self.a.AddCorrection(Correction('ISRunc',corrtype='uncert'))
+                self.a.AddCorrection(Correction('FSRunc',corrtype='uncert'))
+
+                # perhaps the first three should be uncert types, but because nominal = 1.0, it's functionally equivalent
+                self.a.AddCorrection(Correction('QCDscale_factorization',corrtype='weight'))
+                self.a.AddCorrection(Correction('QCDscale_renormalization',corrtype='weight'))
+                self.a.AddCorrection(Correction('QCDscale_combined',corrtype='weight'))
+                self.a.AddCorrection(Correction('QCDscale_uncert',corrtype='uncert'))
+
                 if self.year == '16' or self.year == '17' or 'APV' in self.year:
                     self.a.AddCorrection(Correction('L1PreFiringWeight',corrtype='weight'))
                 elif self.year == '18':
@@ -318,24 +376,46 @@ class XHYbbWW:
             #Corrections for electron mva ID (wp80 no isolation)
             cols = ['Lepton_eta','Lepton_pt','LeptonType']
             ele_filepath = 'corrections/electron_{}.json'.format(self.year) #path to json file - for constructor
-            ElectronIDWeight = Correction('ElectronIDWeight','TIMBER/Framework/include/ElectronID_weight.h',constructor=[str(self.year), "wp80noiso", ele_filepath], mainFunc='eval', corrtype='weight', columnList=cols)
+            ElectronIDWeight = Correction('ElectronIDWeight','TIMBER/Framework/include/ElectronID_weight.h',
+                constructor=[str(self.year), "wp80noiso", ele_filepath], #proper pt, eta bounds included as default argument in c++ code
+                mainFunc='eval', 
+                corrtype='weight', 
+                columnList=cols
+            )
             self.a.AddCorrection(ElectronIDWeight, evalArgs={'Lepton_eta':'Lepton_eta','Lepton_pt':'Lepton_pt','LeptonType':'LeptonType'})
 
             #Can use same TIMBER correction module to obtain electron reconstruction corrections
-            ElectronRecoWeight = Correction('ElectronRecoWeight','TIMBER/Framework/include/ElectronID_weight.h',constructor=[str(self.year), "RecoAbove20", ele_filepath], mainFunc='eval', corrtype='weight', columnList=cols)
+            ElectronRecoWeight = Correction('ElectronRecoWeight','TIMBER/Framework/include/ElectronID_weight.h',
+                constructor=[str(self.year), "RecoAbove20", ele_filepath], 
+                mainFunc='eval', 
+                corrtype='weight', 
+                columnList=cols
+            )
             self.a.AddCorrection(ElectronRecoWeight, evalArgs={'Lepton_eta':'Lepton_eta','Lepton_pt':'Lepton_pt','LeptonType':'LeptonType'})
-
+            
             #Apply muon ID corrections
             muoID_filepath = 'corrections/ScaleFactors_Muon_highPt_IDISO_20{}_schemaV2.json'.format(self.year)
-            MuonIDWeight = Correction('MuonIDWeight','TIMBER/Framework/include/MuonID_weight.h',constructor=["NUM_MediumID_DEN_GlobalMuonProbes",muoID_filepath, 50, 1000], mainFunc='eval', corrtype='weight', columnList=cols) #same column list
-            self.a.AddCorrection(MuonIDWeight, evalArgs={'Lepton_eta':'Lepton_eta','Lepton_pt':'Lepton_pt','LeptonType':'LeptonType'})
+            self.a.Define('Lepton_abseta','abs(Lepton_eta)') # Muon scale factors organized by |eta|
+            muoID_cols = ['Lepton_abseta','Lepton_pt','LeptonType']
+            MuonIDWeight = Correction('MuonIDWeight','TIMBER/Framework/include/MuonID_weight.h',
+                constructor=["NUM_MediumID_DEN_GlobalMuonProbes", muoID_filepath], 
+                mainFunc='eval', 
+                corrtype='weight', 
+                columnList=muoID_cols #same column list
+            )
+            self.a.AddCorrection(MuonIDWeight, evalArgs={'Lepton_eta':'Lepton_abseta','Lepton_pt':'Lepton_pt','LeptonType':'LeptonType'})
 
             #Muon reconstruction scale factors
             self.a.Define('Lepton_p','Lepton_pt*cosh(Lepton_eta)') #Muon reco scale factors indexed by p (not pt)
             muoRECO_filepath = 'corrections/ScaleFactors_Muon_highPt_RECO_20{}_schemaV2.json'.format(self.year)
-            muoRECO_cols = ['Lepton_eta','Lepton_p','LeptonType']
-            MuonRecoWeight = Correction('MuonRecoWeight','TIMBER/Framework/include/MuonID_weight.h',constructor=["NUM_GlobalMuons_DEN_TrackerMuonProbes",muoRECO_filepath, 50, 3500], mainFunc='eval', corrtype='weight', columnList=muoRECO_cols)
-            self.a.AddCorrection(MuonRecoWeight, evalArgs={'Lepton_eta':'Lepton_eta','Lepton_pt':'Lepton_p','LeptonType':'LeptonType'})
+            muoRECO_cols = ['Lepton_abseta','Lepton_p','LeptonType']
+            MuonRecoWeight = Correction('MuonRecoWeight','TIMBER/Framework/include/MuonID_weight.h',
+                constructor=["NUM_GlobalMuons_DEN_TrackerMuonProbes",muoRECO_filepath], 
+                mainFunc='eval', 
+                corrtype='weight', 
+                columnList=muoRECO_cols
+            )
+            self.a.AddCorrection(MuonRecoWeight, evalArgs={'Lepton_eta':'Lepton_abseta','Lepton_pt':'Lepton_p','LeptonType':'LeptonType'})
 
     def GetXsecScale(self):
         lumi = self.config['lumi{}'.format(self.year)]
@@ -346,20 +426,41 @@ class XHYbbWW:
         return lumi*xsec/self.a.genEventSumw
 
     # for trigger efficiencies
-    def ApplyTrigs(self,ApplyLeptonTrigs=True):
-        #For now, just apply triggers straight up
-        #Eventually, once trigger efficiencies in data measured, can just apply them as a weight correction to MC
-        all_trigs = self.trigs[self.year if 'APV' not in self.year else '16']
-        h_trigs = all_trigs['HADRONIC']
-        print('Hadronic trigger list: {}'.format(h_trigs))
-        self.a.Cut('h_trigger',self.a.GetTriggerString(h_trigs))
-        if ApplyLeptonTrigs:
-            l_trigs = []
-            for group in ['ELECTRON','MUON']:
-                for trig in all_trigs[group]:
-                    l_trigs.append(trig)
-            print('Leptonic trigger list: {}'.format(l_trigs))
-            self.a.Cut('l_trigger',self.a.GetTriggerString(l_trigs))
+    def ApplyTrigs(self, corr=None):
+        if self.a.isData:
+            #The basic logic is that for a given primary dataset, we need to accept events which pass the corresponding triggers for that dataset, but reject events which also pass the triggers of other datasets (in order to avoid double counting). We start by accepting all events which pass SingleMuon triggers and then go down the ladder. Note that for 2018, the electron/photon triggers were combined into a single PD (EGamma), but are separate (Single Electron + Single Photon) for the other years.
+            all_trigs = self.trigs[self.year if '16' not in self.year else '16']
+            h_trigs = all_trigs['JETHT']
+            e_trigs = all_trigs['ELECTRON'] if self.year != '18' else all_trigs['EGAMMA']
+            m_trigs = all_trigs['MUON']
+            if self.year != '18':
+                p_trigs = all_trigs['PHOTON']
+
+            if 'Muon' in self.setname:
+                print('Muon trigger list: {}'.format(m_trigs))
+                self.a.Cut('m_trigger',self.a.GetTriggerString(m_trigs))
+
+            elif 'Electron' in self.setname or 'EGamma' in self.setname:
+                print('Electron/EGamma trigger list: {}'.format(e_trigs))
+                self.a.Cut('e_trigger',self.a.GetTriggerString(e_trigs))
+                self.a.Cut('e_muOrthogonal','!'+self.a.GetTriggerString(m_trigs)) #remove events which pass electron AND muon triggers to avoid double-counting
+
+            elif 'Photon' in self.setname: #for year != 2018
+                print('Photon trigger list: {}'.format(p_trigs))
+                self.a.Cut('p_trigger',self.a.GetTriggerString(p_trigs))
+                self.a.Cut('p_muOrthogonal','!'+self.a.GetTriggerString(m_trigs))
+                self.a.Cut('p_eleOrthogonal','!'+self.a.GetTriggerString(e_trigs))
+
+            else: #JetHT data
+                print('Hadronic trigger list: {}'.format(h_trigs))
+                self.a.Cut('h_trigger',self.a.GetTriggerString(h_trigs))
+                self.a.Cut('h_muOrthogonal','!'+self.a.GetTriggerString(m_trigs))
+                self.a.Cut('h_eleOrthogonal','!'+self.a.GetTriggerString(e_trigs))
+                if self.year != '18':
+                    self.a.Cut('h_gamOrthogonal','!'+self.a.GetTriggerString(p_trigs))
+        else:
+            self.a.AddCorrection(corr, evalArgs={'xval':'mhww_msoftdrop','yval':'Lepton_abseta'})
+        
         self.nTrigs = self.getNweighted()
         self.AddCutflowColumn(self.nTrigs, "nTrigs")
         return self.a.GetActiveNode()
@@ -373,11 +474,12 @@ class XHYbbWW:
             'nJet','Jet_btagDeepFlavB','Jet_pt','Jet_eta','Jet_phi','Jet_mass','Jet_btagDeepB','Jet_jetId',
             'nFatJet','FatJet_eta','FatJet_msoftdrop','FatJet_pt','FatJet_phi','FatJet_JES_nom','FatJet_particleNetMD*', 'FatJet_rawFactor',
             'FatJet_subJetIdx1','FatJet_subJetIdx2','FatJet_hadronFlavour','FatJet_nBHadrons','FatJet_nCHadrons','SubJet*'
-            'FatJet_jetId','nCorrT1METJet','CorrT1METJet_*','nMuon','Muon_*','nElectron','Electron_*','HLT_*',
+            'FatJet_jetId','nCorrT1METJet','CorrT1METJet_*','nMuon','Muon_*','nElectron','Electron_*',
             'RawMET_phi','RawMET_pt','RawMET_sumEt','ChsMET_phi','ChsMET_pt','ChsMET_sumEt','MET_phi','MET_pt','MET_sumEt',
             'genWeight','event','eventWeight','luminosityBlock','run','NSTART','NFLAGS','LEPPRE','JETPRE','METPT'
         ]
         columns.extend(['nGenJet','nSoftActivityJet','nSubJet'])
+        columns.extend(['HLT_AK8*','HLT_PFHT*','HLT_PFJet*','HLT_Iso*','HLT_Mu*','HLT_TkMu*','HLT_OldMu*','HLT_Ele*','HLT_Photon*','HLT_MET*','HLT_PFMET*'])
           
         if not self.a.isData:
             columns.extend(['nGenPart','GenPart_*','GenMET_*','genWeight']) 
@@ -385,12 +487,18 @@ class XHYbbWW:
                             'FatJet_JER_nom','FatJet_JER_up','FatJet_JER_down',
                             'FatJet_JMS_nom','FatJet_JMS_up','FatJet_JMS_down',
                             'FatJet_JMR_nom','FatJet_JMR_up','FatJet_JMR_down'])
-            columns.extend(['Pileup__nom','Pileup__up','Pileup__down','Pdfweight__up','Pdfweight__down'])
+            columns.extend(['Pileup__nom','Pileup__up','Pileup__down','Pdfweight__up','Pdfweight__down','ISR__up','ISR__down','FSR__up','FSR__down'])
             if self.year == '16' or self.year == '17' or 'APV' in self.year:
                 columns.extend(['L1PreFiringWeight_Nom', 'L1PreFiringWeight_Up', 'L1PreFiringWeight_Dn'])       # these are the default columns in NanoAODv9
                 columns.extend(['L1PreFiringWeight__nom','L1PreFiringWeight__up','L1PreFiringWeight__down'])    # these are the weight columns created by the BranchCorrection module
             elif self.year == '18':
                 columns.append('HEM_drop__nom')
+
+            if (('WW' not in self.setname) and ('WZ' not in self.setname) and ('ZZ' not in self.setname)):
+                columns.extend(['QCDscale_factorization__nom','QCDscale_factorization__up','QCDscale_factorization__down'])
+                columns.extend(['QCDscale_renormalization__nom','QCDscale_renormalization__up','QCDscale_renormalization__down'])
+                columns.extend(['QCDscale_combined__nom','QCDscale_combined__up','QCDscale_combined__down'])
+                columns.extend(['QCDscale_uncert__up','QCDscale_uncert__down'])
         
         # get ready to send out snapshot
         self.a.SetActiveNode(node)
@@ -438,7 +546,7 @@ class XHYbbWW:
         self.a.Cut('kinLepton_cut','kinEleIdx != -1 || kinMuIdx != -1') #at least one good lepton
         self.a.Define('LeptonType','LeptonIdx(kinEleIdx,kinMuIdx,Electron_pt,Muon_pt)') #picks higher pt signal lepton - output = 0 (lepton is electron) or 1 (lepton is muon)
 
-        self.a.Cut('leptonQuality','LeptonType == 0? Electron_mvaFall17V2noIso_WP80[kinEleIdx] : Muon_mediumId[kinMuIdx]')
+        self.a.Cut('leptonQuality','LeptonType == 0? Electron_mvaFall17V2noIso_WP90[kinEleIdx] : Muon_mediumId[kinMuIdx]')
 
         self.nkinLep = self.getNweighted()
         self.AddCutflowColumn(self.nkinLep,'nkinLep')
