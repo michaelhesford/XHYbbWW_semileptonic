@@ -14,12 +14,12 @@
 	"WJetsHT400":315.2,
 	"WJetsHT600":68.58,
 	"WJetsHT800":34.69,
-        "WJetsToLNuHT200":335.5,
-        "WJetsToLNuHT400":45.25,
-        "WJetsToLNuHT600":10.97,
-        "WJetsToLNuHT800":4.933,
-        "WJetsToLNuHT1200":1.16,
-        "WJetsToLNuHT2500":0.02646,
+        "WJetsLepHT200":337.8,
+        "WJetsLepHT400":44.93,
+        "WJetsLepHT600":11.19,
+        "WJetsLepHT800":4.926,
+        "WJetsLepHT1200":1.152,
+        "WJetsLepHT2500":0.02646,
 	"ZJetsHT400":145.3,
 	"ZJetsHT600":34.29,
 	"ZJetsHT800":18.57,
@@ -29,6 +29,9 @@
         "ZZto2L2Q":3.222,
         "WZto1L1Nu2Q":9.119,
         "WZto2L2Q":6.331,
+        "WW": 118.7,
+        "WZ": 27.55,
+        "ZZ": 12.23,
         "XHY-4000-2500":0.01,
 	"XHY-3500-1800":0.01,
 	"XHY-3000-1400":0.01,
@@ -39,26 +42,28 @@
     },
     "TRIGS" : {
         "16" : {
-            "HADRONIC" : ["HLT_PFHT800","HLT_PFHT900"],
-            "ELECTRON" : ["HLT_Ele27_WPTight_Gsf","HLT_Ele115_CaloIdVT_GsfTrkIdT","HLT_Ele45_CaloIdVT_GsfTrkIdT_PFJet200_PFJet50","HLT_Ele50_CaloIdVT_GsfTrkIdT_PFJet165","HLT_Photon175"],
-            "MUON" : ["HLT_Mu50","HLT_IsoMu24","HLT_TkMu50","HLT_IsoMu24"]
+            "JETHT" : ["HLT_PFHT800","HLT_PFHT900","HLT_PFJet450"],
+            "ELECTRON" : ["HLT_Ele27_WPTight_Gsf","HLT_Ele45_WPLoose_Gsf","HLT_Ele115_CaloIdVT_GsfTrkIdT"],
+            "MUON" : ["HLT_IsoMu24","HLT_IsoTkMu24","HLT_Mu50","HLT_TkMu50"],
+            "PHOTON" : ["HLT_Photon175"]
         },
         "17" : {
-            "HADRONIC" : ["HLT_PFHT1050","HLT_AK8PFJet500","HLT_AK8PFHT750_TrimMass50","HLT_AK8PFHT800_TrimMass50","HLT_AK8PFJet400_TrimMass30"],
-            "ELECTRON" : ["HLT_Ele35_WPTight_Gsf","HLT_Ele115_CaloIdVT_GsfTrkIdT","HLT_Ele32_WPTight_Gsf_L1DoubleEG","HLT_Ele50_CaloIdVT_GsfTrkIdT_PFJet165","HLT_Photon200"], 
-            "MUON" : ["HLT_Mu50","HLT_IsoMu24","HLT_TkMu100","HLT_IsoMu27","HLT_OldMu100"]
+            "JETHT" : ["HLT_PFHT1050","HLT_AK8PFJet500","HLT_AK8PFHT750_TrimMass50","HLT_AK8PFHT800_TrimMass50","HLT_AK8PFJet400_TrimMass30"],
+            "ELECTRON" : ["HLT_Ele35_WPTight_Gsf","HLT_Ele32_WPTight_Gsf_L1DoubleEG","HLT_Ele115_CaloIdVT_GsfTrkIdT"],
+            "MUON" : ["HLT_IsoMu27","HLT_Mu50"],
+            "PHOTON" : ["HLT_Photon200"]
         },
         "18" : {
-            "HADRONIC" : ["HLT_PFHT1050","HLT_AK8PFJet400_TrimMass30","HLT_AK8PFHT850_TrimMass50"],
-            "ELECTRON" : ["HLT_Ele32_WPTight_Gsf","HLT_Ele115_CaloIdVT_GsfTrkIdT","HLT_Ele50_CaloIdVT_GsfTrkIdT_PFJet165","HLT_Photon200"],
-            "MUON" : ["HLT_Mu50","HLT_IsoMu24","HLT_TkMu100","HLT_IsoMu24","HLT_OldMu100"]
+            "JETHT" : ["HLT_PFHT1050","HLT_AK8PFJet400_TrimMass30","HLT_AK8PFHT850_TrimMass50"],
+            "EGAMMA" : ["HLT_Ele32_WPTight_Gsf","HLT_Ele115_CaloIdVT_GsfTrkIdT","HLT_Photon200"],
+            "MUON" : ["HLT_IsoMu24","HLT_Mu50"]
         }
     },
     "CUTS" : {
         "JET" : {
 	    "mh":[100,145],
 	    "mw":[65,100],
-	    "particleNetMD_HbbvsQCD":0.94,
+	    "particleNetMD_HbbvsQCD":0.98,
 	    "particleNetMD_WqqvsQCD":0.8,
             "btagL_18":0.0490,
             "btagL_17":0.0532,

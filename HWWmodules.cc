@@ -21,7 +21,7 @@ RVec<int> PickDijets(RVec<float> pt, RVec<float> eta, RVec<float> phi, RVec<floa
     }
     // now loop over the remaining jets,
     for (int ijet=jet0Idx+1; ijet<eta.size(); ijet++) {
-        if (std::abs(eta[ijet]) < 2.4 && mass[ijet] > 50 && pt[ijet] > 300) {
+        if (std::abs(eta[ijet]) < 2.4 && mass[ijet] > 50 && pt[ijet] > 300) { //&& std::abs(eta[ijet] - eta[jet0Idx]) < 1.3) { //experimental delta eta cut
             jet1Idx = ijet;
             break;
         }

@@ -15,11 +15,12 @@ eos_path = args.path
 jobs=[]
 redirector = 'root://cmseos.fnal.gov/'
 cmd = 'eos {} ls {}*'.format(redirector,eos_path)
-rawFiles = subprocess.check_output(cmd, shell=True)
+rawFiles = subprocess.check_output(cmd, shell=True).decode()
 files = rawFiles.split('\n')
 #file name: XHYbbWW_pileup_ttbar-allhad_17_<JOB>_<NJOBS>.root
 njobs = int(files[0].split('.')[0].split('_')[-1])
 for f in files:
+    print(f)
     if f == '': #this string appears at the end of the files list for some reason
         continue
     ijob = int(f.split('_')[-2]) #this relies on a consistent format for output files
