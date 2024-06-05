@@ -85,9 +85,11 @@ python plots/get_all.py -f studies -g <LIST OF SETNAMES> --combine_years
 
 The `--combine_years` option uses the `hadd` function to combine outputs from different years for each setname into full Run2 plots.
 
+**Note:** For correctness, studies (and all scripts involving renormalization) should always be run on the full set of MC for a particular year (njobs = 1), unless just testing code. We renormalize MC samples using using the formula (cross-section) x (luminosity) / (sum of event weights). The event weight sum `genEventSumw` is stored separately for each individual raw NanoAOD file. When multiple files are strung together for a single job, the individual values are added together for the purposes of renormalization. By the laws of *fractions*, renormalizing the full MC by the full sum of event weights will NOT produce the same result as renormalizing smaller chunks by smaller values of `genEventSumw` and then adding those chunks together at the end.
+
 ## 5) Make trigger efficiencies
 
-The set of triggers used in the analysis is listed below and is also stored in `XHYbbWWconfig.json`.
+The set of triggers used in the analysis is listed for each primary dataset below; triggers are also stored in `XHYbbWWconfig.json`.
 
 | Year | SingleMuon |
 | ---- | ------------------- |
@@ -109,7 +111,35 @@ The set of triggers used in the analysis is listed below and is also stored in `
 | ---- | --------------- |
 | 2018 | `HLT_Ele32_WPTight_Gsf` `HLT_Ele115_CaloIdVT_GsfTrkIdT` `HLT_Photon200` |
 
+Efficiencies are measured for the full suite of triggers in the JetHT dataset, separately for each year. The efficiency, in this case, is the ratio of events which pass most of the event selection (along with several JetHT reference triggers) and the above target triggers vs all events which pass the selection/reference triggers. It was discovered that, during run 2017B, certain triggers were not available. Therefore, including run 2017B into the total 2017 dataset causes the efficiency of the entire year to drop. Therefore, the efficiency is measured separately for 2017B, but this run is dropped from the total 2017 dataset when measuring the efficiency for the whole year. 
+
+Run `XHYbbWW_trigger1D.py` to generate plots of trigger efficiencies as functions of the lepton $p_T$ and $|\eta|$. The script `XHYbbWW_trigger2D.py` performs the same task but produces 2D efficiency histograms which can be fed to TIMBER's `EffLoader` module later on.
+
+Individual job: `python XHYbbWWW_trigger2D.py -y <YEAR>`
+Batch: 
+```
+python condor/trigger_args.py
+python CondorHelper.py -r condor/run_trigger2D.sh -a condor/trigger_args.txt -i "XHYbbWW_trigger2D.py XHYbbWW_class.py XHYbbWW_config.json"
+```
+
 ## 5) Run selection + make template histograms
+
+The step performs the remaining selection used in the analysis and produces the template histograms used for the background estimate with 2DAlphabet. Histograms are binned in $m_X$ vs $m_Y$. For each systematic uncertainty considered in the analysis, histograms of the form `syst__nom`, `syst__up`, and `syst__down` are produced, corresponding to the nominal, up ($+1\sigma$), and down($-1\sigma$) variations of that systematic. Such plots are produced in four orthogonal regions of the data, as defined by the jet tagging scores below:
+
+**Signal region:** Hbb > 0.98
+**Control region:** Hbb < 0.98
+**Pass subregion:** Wqq > 0.8
+**Fail subregion:** Wqq < 0.8
+
+Individual job: `python XHYbbWW_selectionHF.py -s <SETNAME> -y <YEAR> -j <IJOB> -n <NJOBS>
+Batch:
+
+```
+python condor/selection_args.py
+python CondorHelper.py -r condor/run_selectionHF.sh -a condor/selection_args.txt -i "XHYbbWW_selectionHF.py XHYbbWW_class.py HWWmodules.cc XHYbbWWconfig.json"
+```
+
+
 
 
 
