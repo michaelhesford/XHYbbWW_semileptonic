@@ -116,6 +116,7 @@ Efficiencies are measured for the full suite of triggers in the JetHT dataset, s
 Run `XHYbbWW_trigger1D.py` to generate plots of trigger efficiencies as functions of the lepton $p_T$ and $|\eta|$. The script `XHYbbWW_trigger2D.py` performs the same task but produces 2D efficiency histograms which can be fed to TIMBER's `EffLoader` module later on.
 
 Individual job: `python XHYbbWWW_trigger2D.py -y <YEAR>`
+
 Batch: 
 ```
 python condor/trigger_args.py
@@ -132,6 +133,7 @@ The step performs the remaining selection used in the analysis and produces the 
 **Fail subregion:** Wqq < 0.8
 
 Individual job: `python XHYbbWW_selectionHF.py -s <SETNAME> -y <YEAR> -j <IJOB> -n <NJOBS>
+
 Batch:
 
 ```
