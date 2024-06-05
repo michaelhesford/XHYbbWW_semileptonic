@@ -95,17 +95,25 @@ The set of triggers used in the analysis is listed below and is also stored in `
 | 2017 | SingleMuon: `HLT_IsoMu27`HLT_Mu50` SingleElectron: `HLT_Ele35_WPTight_Gsf``HLT_Ele32_WPTight_Gsf_L1DoubleEG``HLT_Ele115_CaloIdVT_GsfTrkIdT` SinglePhoton: `HLT_Photon200` |
 | 2018 | SingleMuon: 'HLT_IsoMu24''HLT_Mu50' EGamma: `HLT_Ele32_WPTight_Gsf``HLT_Ele115_CaloIdVT_GsfTrkIdT``HLT_Photon200` |
 
-| Year | SingleMuon Triggers |
+| Year | *SingleMuon* Triggers |
 | ---- | ------------------- |
 | 2016 | `HLT_IsoMu24` `HLT_IsoTkMu24` `HLT_Mu50` `HLT_TkMu50` |
 | 2017 | `HLT_IsoMu27` `HLT_Mu50` |
 | 2018 | `HLT_IsoMu24` `HLT_Mu50` |
 
-| SingleElectron |
-| -------------- | 
+| Year | *SingleElectron* Triggers |
+| ---- | ----------------------- | 
 | 2016 | `HLT_Ele27_WPTight_Gsf` `HLT_Ele45_WPLoose_Gsf` `HLT_Ele115_CaloIdVT_GsfTrkIdT` |
 | 2017 | `HLT_Ele35_WPTight_Gsf` `HLT_Ele32_WPTight_Gsf_L1DoubleEG` `HLT_Ele115_CaloIdVT_GsfTrkIdT` | 
 
+| Year | *SinglePhoton* Triggers |
+| ---- | --------------------- | 
+| 2016 | `HLT_Photon175` |
+| 2017 | `HLT_Photon200` |
+
+| Year | *EGamma* Triggers |
+| ---- | --------------- |
+| 2018 | `HLT_Ele32_WPTight_Gsf` `HLT_Ele115_CaloIdVT_GsfTrkIdT` `HLT_Photon200` |
 
 ## 5) Run selection + make template histograms
 
