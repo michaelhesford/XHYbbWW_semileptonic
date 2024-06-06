@@ -91,7 +91,7 @@ def XHYbbWW_selection(self,variation):
             plot_vars = ['mhwlv','mwlv']
             templates = selection.a.MakeTemplateHistos(ROOT.TH2F('MXvMY_{}'.format(region), 'X vs Y Invariant Mass - {} {}'.format(region.split('_')[1],region.split('_')[0]), binsX[0],binsX[1],binsX[2],binsY[0],binsY[1],binsY[2]),plot_vars)
             templates.Do('Write')
- 
+    
     cutflowInfo = OrderedDict([
        ('start',self.nstart),
        ('nTrigs',self.nTrigs),
@@ -100,11 +100,11 @@ def XHYbbWW_selection(self,variation):
        ('nHiggs',self.nHiggs),
        ('nWqq',self.nWqq),
        ('nHtag_SR',self.nHtag_SR),
-       ('nDPhiLH_SR',self.nDPhiLH_SR),
+       #('nDPhiLH_SR',self.nDPhiLH_SR),
        ('nWP_SR',self.nWP_SR),
        ('nWF_SR',self.nWF_SR),
        ('nHtag_ttCR',self.nHtag_ttCR),
-       ('nJetB_ttCR_HF',self.nJetB_ttCR_HF),
+       #('nJetB_ttCR_HF',self.nJetB_ttCR_HF),
        ('nWP_ttCR',self.nWP_ttCR),
        ('nWF_ttCR',self.nWF_ttCR)
     ])
@@ -155,7 +155,6 @@ if __name__ == '__main__':
     selection.nstart = selection.getNweighted()
     selection.AddCutflowColumn(selection.nstart,'nstart')
 
-    selection.ApplyTrigs(ApplyLeptonTrigs = False)
     selection.ApplyJMECorrections(variation)
 
     selection.KinematicLepton()
@@ -168,7 +167,16 @@ if __name__ == '__main__':
 
     selection.ApplyPNetReweight(Hbb_wp, Wqq_wp)
     selection.ApplyLeptonCorrections()
-    selection.a.MakeWeightCols(extraNominal='' if selection.a.isData else 'genWeight*%s'%selection.GetXsecScale())
-    
+
+    # TRIGGER EFFICIENCIES
+    # We must apply the 2017B triffer efficiency to ~12% of the 2017 MC (as efficiencies are different for this era)
+    if 'Data' not in setname: # we are dealing with MC
+        trigEff = Correction('TriggerEff','TIMBER/Framework/include/EffLoader.h',['plots/trigger2D/XHYbbWWtrigger2D_{}.root'.format(year if '16' not in year else '16all'),'Efficiency'], corrtype='weight')
+    else:
+        trigEff = None 
+    selection.ApplyTrigs(trigEff)
+
+    selection.a.MakeWeightCols(correctionNames=list(selection.a.GetCorrectionNames()),extraNominal='' if selection.a.isData else str(selection.GetXsecScale()))   
+ 
     XHYbbWW_selection(selection,variation)
    
