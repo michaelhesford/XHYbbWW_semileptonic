@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <cmath>
 
-RVec<int> PickDijets(RVec<float> pt, RVec<float> eta, RVec<float> phi, RVec<float> mass) {
+RVec<int> PickDijets(RVec<float> pt, RVec<float> eta, RVec<float> mass) {
     // We are looking for a lead jet separated by a sublead jet by at least 90 degrees
     int jet0Idx = -1;
     int jet1Idx = -1;
@@ -34,14 +34,14 @@ RVec<int> PickDijets(RVec<float> pt, RVec<float> eta, RVec<float> phi, RVec<floa
     }
 }
 
-int PickJetB(RVec<ROOT::Math::PtEtaPhiMVector> Jet_vect, ROOT::Math::PtEtaPhiMVector Lepton_vect, RVec<float> btag, float wp) {
+int PickJetB(RVec<ROOT::Math::PtEtaPhiMVector> Jet_vect, ROOT::Math::PtEtaPhiMVector Lepton_vect, RVec<int> jetID, RVec<float> btag, float wp) {
     // Pick index of highest pt b-tagged ak4 jet with deltaR (jet,lepton) < 2
     int Jet_idx = -1;
-    for (int idx=0; idx<Jet_vect.size(); idx++) {
-        if (Jet_vect[idx].Pt() > 25 && std::abs(Jet_vect[idx].Eta()) < 2.4 && btag[idx] > wp && hardware::DeltaR(Jet_vect[idx],Lepton_vect) < 2) {
-            Jet_idx = idx;
-            break;
-        }
+    for (int i=0; i<Jet_vect.size(); i++) {
+        if (Jet_vect[i].Pt() > 25 && std::abs(Jet_vect[i].Eta()) < 2.4 && btag[i] > wp && jetID[i] == 6 && abs(hardware::DeltaPhi(Jet_vect[i].Phi(),Lepton_vect.Phi())) < 2) {
+            Jet_idx = i;
+	    break;
+	}
     }
     return Jet_idx;
 }
@@ -49,7 +49,7 @@ int PickJetB(RVec<ROOT::Math::PtEtaPhiMVector> Jet_vect, ROOT::Math::PtEtaPhiMVe
 int PickAK8(RVec<ROOT::Math::PtEtaPhiMVector> FatJet_vect, ROOT::Math::PtEtaPhiMVector BJet_vect, ROOT::Math::PtEtaPhiMVector Lepton_vect) {
     int Jet_idx = -1;
     for (int idx=0; idx<FatJet_vect.size(); idx++) {
-        if (FatJet_vect[idx].Pt() > 200 && std::abs(FatJet_vect[idx].Eta()) < 2.4 && hardware::DeltaR(FatJet_vect[idx],Lepton_vect) > 0.8 && hardware::DeltaR(FatJet_vect[idx],BJet_vect) > 0.8) {
+        if (FatJet_vect[idx].Pt() > 300 && std::abs(FatJet_vect[idx].Eta()) < 2.4 && abs(hardware::DeltaPhi(FatJet_vect[idx].Phi(),Lepton_vect.Phi())) > 2 && hardware::DeltaR(FatJet_vect[idx],BJet_vect) > 0.8) {
             Jet_idx = idx;
             break;
         }
@@ -57,17 +57,30 @@ int PickAK8(RVec<ROOT::Math::PtEtaPhiMVector> FatJet_vect, ROOT::Math::PtEtaPhiM
     return Jet_idx;
 }
 
+bool does_bjet_exist(ROOT::Math::PtEtaPhiMVector Hbb_vec, RVec<ROOT::Math::PtEtaPhiMVector> ak4_vec, RVec<float> ak4_btag, float wp) {
+    // Identify b-tagged AK4 jets which are outside the radius of the AK8 Higgs jets
+    std::size_t NJ = ak4_vec.size();
+    bool ak4 = false;
+    for (int i=0; i<NJ; i++) {
+	if (ak4_btag[i] > wp && hardware::DeltaR(ak4_vec[i], Hbb_vec) > 1.2) {  
+	    ak4 = true;
+	    break;
+	}
+    }
+    return ak4;
+}
+
 bool isLeptonPreselected(int nElectron, RVec<float> elePt, RVec<float> eleEta, RVec<float> eleIso, int nMuon, RVec<float> muPt, RVec<float> muEta, RVec<float> muIso){
     if (nElectron < 1 && nMuon < 1) {return false;}
     bool isLepPre = false;
     for (int idx=0; idx<elePt.size(); idx++){
-        if (elePt[idx] > 20 && std::abs(eleEta[idx]) < 2.5 && eleIso[idx] < 0.5){
+        if (elePt[idx] > 20 && std::abs(eleEta[idx]) < 2.5 && eleIso[idx] < 1){
             isLepPre = true;
             return isLepPre;
         }
     }
     for (int idx=0; idx<muPt.size(); idx++){
-        if (muPt[idx] > 20 && std::abs(muEta[idx]) < 2.4 && muIso[idx] < 0.5){
+        if (muPt[idx] > 20 && std::abs(muEta[idx]) < 2.4 && muIso[idx] < 1){
             isLepPre = true;
             break;
         }
@@ -101,7 +114,7 @@ int kinElectron(RVec<float> pt, RVec<float> eta, RVec<float> iso){
     // Select highest pt signal-like electron
     int eleIdx = -1;
     for (int idx=0; idx<pt.size(); idx++) {
-        if (pt[idx] > 25 && std::abs(eta[idx]) < 2.5 && iso[idx] < 0.1) {
+        if (pt[idx] > 25 && std::abs(eta[idx]) < 2.5) { //  && iso[idx] < 0.1) {
             eleIdx = idx;
             break;
         }
@@ -113,12 +126,36 @@ int kinMuon(RVec<float> pt, RVec<float> eta, RVec<float> iso){
     // Select highest pt signal-like muon
     int muIdx = -1;
     for (int idx=0; idx<pt.size(); idx++) {
-        if (pt[idx] > 25 && std::abs(eta[idx]) < 2.4 && iso[idx] < 0.1) {
+        if (pt[idx] > 25 && std::abs(eta[idx]) < 2.4) { // && iso[idx] < 0.1) {
             muIdx = idx;
             break;
         }
     }
     return muIdx;
+}
+
+int kinLepton(RVec<float> pt, RVec<float> eta){
+    // Select highest pt signal-like lepton
+    int Idx = -1;
+    for (int idx=0; idx<pt.size(); idx++) {
+        if (pt[idx] > 25 && std::abs(eta[idx]) < 2.5) {
+            Idx = idx;
+            break;
+        }
+    }
+    return Idx;
+}
+
+int PNetLepton(RVec<float> pt, RVec<float> eta, RVec<float> iso){
+    // Select highest pt signal-like lepton
+    int Idx = -1;
+    for (int idx=0; idx<pt.size(); idx++) {
+        if (pt[idx] > 30 && std::abs(eta[idx]) < 2.4 && iso[idx] < 0.1) {
+            Idx = idx;
+            break;
+        }
+    }
+    return Idx;
 }
 
 int leptonType_studies(RVec<float> electron_pt, RVec<float> muon_pt) {
@@ -306,4 +343,76 @@ RVec<int> JetFlavor_signal_vec(RVec<float> Jet_eta, RVec<float> Jet_phi, RVec<fl
         jetId[ijet] = flav;
     }
     return jetId;
+}
+
+RVec<float> deltaR_from_reference(RVec<ROOT::Math::PtEtaPhiMVector> jet_vec, ROOT::Math::PtEtaPhiMVector ref_vec) {
+    // Takes a collection of objects and returns a vector of DeltaR values between those objects and some reference object
+    // i.e. calculates DeltaR between a collection of b-tagged AK4 jets and the Higgs candidate jet
+    std::size_t nJets = jet_vec.size();
+    RVec<float> DeltaR(nJets);
+    for (int i=0; i<nJets; i++) {
+        float dR = hardware::DeltaR(ref_vec,jet_vec[i]);
+        DeltaR[i] = dR;	
+    }
+    return DeltaR;
+}
+
+RVec<float> deltaPhi_from_reference(RVec<float> jet_phi, float ref_phi) {
+    // Takes a collection of objects and returns a vector of DeltaPhi values between those objects and some reference object
+    std::size_t nJets = jet_phi.size();
+    RVec<float> DeltaPhi(nJets);
+    for (int i=0; i<nJets; i++) {
+        float dPhi = abs(hardware::DeltaPhi(ref_phi,jet_phi[i]));
+        DeltaPhi[i] = dPhi;
+    }
+    return DeltaPhi;
+}
+
+RVec<bool> is_b_in_AK4(RVec<int> GenPart_pdgId, RVec<ROOT::Math::PtEtaPhiMVector> GenPart_vect, RVec<ROOT::Math::PtEtaPhiMVector> AK4_vect) {
+    // Identifies which gen particles are b quarks inside one constituent of an input jet collection
+    std::size_t nPart = GenPart_pdgId.size();
+    RVec<bool> is_b(nPart);
+    for (int i=0; i<nPart; i++) {
+	bool b = false;
+        if (std::abs(GenPart_pdgId[i]) == 5) {
+    	    for (int j=0; j<AK4_vect.size(); j++) {
+	        if (hardware::DeltaR(GenPart_vect[i], AK4_vect[j]) < 0.8) { 	
+	            b = true;
+		    break;
+		}
+            }
+	}
+	is_b[i] = b;
+    }
+    return is_b;
+}
+
+RVec<int> does_AK4_have_b(RVec<int> GenPart_pdgId, RVec<ROOT::Math::PtEtaPhiMVector> GenPart_vect, RVec<ROOT::Math::PtEtaPhiMVector> AK4_vect, RVec<float> AK4_btag, float wp) {
+    // Identifies which gen particles are b quarks inside one constituent of an input jet collection, and returns the matching jets
+    std::size_t nJet = AK4_btag.size();
+    RVec<int> is_bjet(nJet);
+    for (int j=0; j<nJet; j++) {
+	int bjet = -1;
+	if (AK4_btag[j] > wp) {
+            for (int i=0; i<GenPart_pdgId.size(); i++) {
+                if (std::abs(GenPart_pdgId[i]) == 5 && hardware::DeltaR(GenPart_vect[i],AK4_vect[j]) < 0.8) {
+                    bjet = j;
+                    break;
+                }
+            }
+	}
+        is_bjet[j] = bjet;
+    }
+    return is_bjet;
+}
+
+RVec<int> PickBfromT(RVec<int> pdgId, RVec<int> mother_idx) {
+    RVec<int> b_idxs(pdgId.size());
+    for (int i=0; i<pdgId.size(); i++) {
+	int b_from_t = -1;
+        if (std::abs(pdgId[i]) == 5 && std::abs(pdgId[mother_idx[i]]) == 6) {
+            b_from_t = i;
+	}
+    }
+    return b_idxs;
 }

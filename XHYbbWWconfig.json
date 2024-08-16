@@ -20,6 +20,17 @@
         "WJetsLepHT800":4.926,
         "WJetsLepHT1200":1.152,
         "WJetsLepHT2500":0.02646,
+        "DYJetsM4HT100":190.6,
+        "DYJetsM4HT200":42.27,
+        "DYJetsM4HT400":4.05,
+        "DYJetsM4HT600":1.216,
+        "DYJetsM50HT100":139.2,
+        "DYJetsM50HT200":38.4,
+        "DYJetsM50HT400":5.174,
+        "DYJetsM50HT600":1.258,
+        "DYJetsM50HT800":0.5598,
+        "DYJetsM50HT1200":0.1305,
+        "DYJetsM50HT2500":0.002997,
 	"ZJetsHT400":145.3,
 	"ZJetsHT600":34.29,
 	"ZJetsHT800":18.57,
@@ -43,8 +54,8 @@
     "TRIGS" : {
         "16" : {
             "JETHT" : ["HLT_PFHT800","HLT_PFHT900","HLT_PFJet450"],
-            "ELECTRON" : ["HLT_Ele27_WPTight_Gsf","HLT_Ele45_WPLoose_Gsf","HLT_Ele115_CaloIdVT_GsfTrkIdT"],
-            "MUON" : ["HLT_IsoMu24","HLT_IsoTkMu24","HLT_Mu50","HLT_TkMu50"],
+            "ELECTRON" : ["HLT_Ele27_WPTight_Gsf","HLT_Ele115_CaloIdVT_GsfTrkIdT"],
+            "MUON" : ["HLT_IsoMu24","HLT_IsoTkMu24","HLT_Mu50"],
             "PHOTON" : ["HLT_Photon175"]
         },
         "17" : {
@@ -61,23 +72,43 @@
     },
     "CUTS" : {
         "JET" : {
-	    "mh":[100,145],
-	    "mw":[65,100],
-	    "particleNetMD_HbbvsQCD":0.98,
-	    "particleNetMD_WqqvsQCD":0.8,
-            "btagL_18":0.0490,
-            "btagL_17":0.0532,
-            "btagL_16APV":0.0508,
-            "btagL_16":0.0480,
-            "btagM_18":0.2783,
-            "btagM_17":0.3040,
-            "btagM_16APV":0.2598,
-            "btagM_16":0.2489
+	    "mh":[100,150],
+	    "mw":[55,105],
+	    "particleNetMD_HbbvsQCD":[0.2,0.98],
+	    "particleNetMD_WqqvsQCD":0.80,
+            "btagDeepJet": {
+	        "M": {
+		    "16APV":0.2598,
+		    "16":0.2489,
+		    "17":0.3040,
+		    "18":0.2783
+	        },
+		"T": {
+                    "16APV":0.6502,
+                    "16":0.6377,
+                    "17":0.7476,
+                    "18":0.7100
+		}
+	    },
+	    "btagDeepCSV": {
+		"M": {
+                    "16APV":0.6001,
+                    "16":0.5847,
+                    "17":0.4506,
+                    "18":0.4168
+		},
+		"T": {
+                    "16APV":0.8819,
+                    "16":0.8767,
+                    "17":0.7738,
+                    "18":0.7665
+		}
+	    }
         }, 
         "ELECTRON" : {
             "pt":25,
             "eta":2.5, 
-            "RelIso":[0.2,0.5],
+            "iso":0.1,
             "mvaFall17V2noIso_barrelIn":0.941,
             "mvaFall17V2noIso_barrelOut":0.899,
             "mvaFall17V2noIso_encap":0.758,
@@ -88,7 +119,7 @@
         "MUON" : {
             "pt":25, 
             "eta":2.4, 
-            "RelIso":[0.2,0.5],
+            "iso":0.1,
             "looseId":"Muon_looseId",
             "mediumId":"Muon_mediumId",
             "tightId":"Muon_tightId" 
