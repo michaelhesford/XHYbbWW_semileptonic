@@ -49,7 +49,7 @@ to submit the pileup jobs using condor. The outputs are then collected into one 
 python scripts/get_pileup_file.py
 ```
 
-## 3) Perform snapshots
+## 4) Perform snapshots
 
 Snapshots are skims performed on the raw NanoAOD files in order to isolate a smaller set of events/variables which are interesting for the analysis. To do this we impose a very loose set of cuts on the data, and save any desired columns of the resulting RDataFrame in a separate `.root` file. Any future scripts can be run on these snapshot files, saving an enormous amount of time.
 
@@ -66,7 +66,7 @@ python CondorHelper.py -r condor/run_snapshot.sh -a condor/snapshot_args.txt -i 
 
 Locations of the otuputs can be collected into `.txt` files using `python snapshots/get_snapshots.py`.
 
-## 4) Run basic studies
+## 5) Run basic studies
 
 This step produces basic kinematic plots and N-1 plots for key variables used in the analysis. Given an ensemble of cuts on different variables, we can use the `Nminus1()` function of TIMBER's`analyzer` class to create a set of nodes in which all but one cut is applied. We then plot each variable, for signal and background MC, in the node where cuts on all variables besides itself are applied. These so-called N-1 plots provide insight into the unique contributions of specific cuts on individual variables; we use them to help select working points which maximize the ratio $s/\sqrt{b}$, where $s$ and $b$ are the signal and background yields, respectively.
 
@@ -85,21 +85,23 @@ python plots/get_all.py -f studies -g <LIST OF SETNAMES> --combine_years
 
 The `--combine_years` option uses the `hadd` function to combine outputs from different years for each setname into full Run2 plots.
 
+Subsequently, run `python studies_plots.py` to produce plots in `png` form. 
+
 **Note:** For correctness, studies (and all scripts involving renormalization) should always be run on the full set of MC for a particular year (njobs = 1), unless just testing code. We renormalize MC samples using using the formula (cross-section) x (luminosity) / (sum of event weights). The event weight sum `genEventSumw` is stored separately for each individual raw NanoAOD file. When multiple files are strung together for a single job, the individual values are added together for the purposes of renormalization. By the laws of *fractions*, renormalizing the full MC by the full sum of event weights will NOT produce the same result as renormalizing smaller chunks by smaller values of `genEventSumw` and then adding those chunks together at the end.
 
-## 5) Make trigger efficiencies
+## 6) Make trigger efficiencies
 
 The set of triggers used in the analysis is listed for each primary dataset below; triggers are also stored in `XHYbbWWconfig.json`.
 
 | Year | SingleMuon |
 | ---- | ------------------- |
 | 2016 | `HLT_IsoMu24` `HLT_IsoTkMu24` `HLT_Mu50` `HLT_TkMu50` |
-| 2017 | `HLT_IsoMu27` `HLT_Mu50` |
-| 2018 | `HLT_IsoMu24` `HLT_Mu50` |
+| 2017 | `HLT_IsoMu27` `HLT_Mu50` `HLT_OldMu100` `HLT_TkMu100` |
+| 2018 | `HLT_IsoMu24` `HLT_Mu50` `HLT_OldMu100` `HLT_TkMu100` |
 
 | Year | SingleElectron |
 | ---- | ----------------------- | 
-| 2016 | `HLT_Ele27_WPTight_Gsf` `HLT_Ele45_WPLoose_Gsf` `HLT_Ele115_CaloIdVT_GsfTrkIdT` |
+| 2016 | `HLT_Ele27_WPTight_Gsf` `HLT_Ele115_CaloIdVT_GsfTrkIdT` |
 | 2017 | `HLT_Ele35_WPTight_Gsf` `HLT_Ele32_WPTight_Gsf_L1DoubleEG` `HLT_Ele115_CaloIdVT_GsfTrkIdT` | 
 
 | Year | SinglePhoton |
@@ -129,20 +131,34 @@ python CondorHelper.py -r condor/run_trigger2D.sh -a condor/trigger_args.txt -i 
 
 Trigger efficiency measurments and scale factors are now taken from central measurements made by the Muon POG for muon triggers (see [here](https://twiki.cern.ch/twiki/bin/view/CMS/MuonPOG#User_Recommendations)) and from results reported in [this analysis note](https://cms.cern.ch/iCMS/jsp/db_notes/noteInfo.jsp?cmsnoteid=CMS%20AN-2022/124) for electron triggers. Application of the efficiencies/scale factors to Monte Carlo is handled inside `XHYbbWW_selection.py`.
 
-## 5) Run selection + make template histograms
+## 7) Run selection + make template histograms
 
 The step performs the remaining selection used in the analysis and produces the template histograms used for the background estimate with 2DAlphabet. Histograms are binned in $m_X$ vs $m_Y$. For each systematic uncertainty considered in the analysis, histograms of the form `syst__nom`, `syst__up`, and `syst__down` are produced, corresponding to the nominal, up ($+1\sigma$), and down($-1\sigma$) variations of that systematic. Such plots are produced in two orthogonal regions of the data: the "signal region", where we expect to observe the signal, and a $t\bar{t}$-enriched measurment region used to calibrate the $t\bar{t}$ Monte Carlo (dubbed the "$t\bar{t}$-MR"). For each region we also construct two sub-regions where the W candidate passes or fails the ParticleNet $W\to qq$ discriminant working point (used for the QCD estimate). These regions are defined by the following criteria. Note that $D_{\text{Hbb}}$ and $D_{\text{Wqq}}$ refer to the Higgs and W tagging discriminants, respectively.
 
 ![App Screenshot](images/selections.png)
 
-Individual job: `python XHYbbWW_selection.py -s <SETNAME> -y <YEAR> -j <IJOB> -n <NJOBS>
+Individual job: `python XHYbbWW_selection.py -s <SETNAME> -y <YEAR> -v <VARIATION> -j <IJOB> -n <NJOBS>`
 
 Batch:
 
 ```
 python condor/selection_args.py
-python CondorHelper.py -r condor/run_selectionHF.sh -a condor/selection_args.txt -i "XHYbbWW_selectionHF.py XHYbbWW_class.py HWWmodules.cc XHYbbWWconfig.json"
+python CondorHelper.py -r condor/run_selectionHF.sh -a condor/selection_args.txt -i "XHYbbWW_selection.py XHYbbWW_class.py HWWmodules.cc XHYbbWWconfig.json"
 ```
+
+We also utilize a separate script to make the template histograms used in the fitting procedure for the QCD estimate. These are 2D histograms generated for data and background Monte Carlo where the x-axis is the $D_{\text{Wqq}}$ score of the W candidate jet and the y-axis is just a dummy variable which allows us to perform the fit in 2DAlphabet (in other words, we are interested in performing a 1D fit along the x-axis, and will achieve this in 2DAlphabet simply by assigining a single bin to the y-axis). Histograms are generated in control regions analogous to the SR and $t\bar{t}$-MR defined above, but using the sidebands of the Higgs mass.  
+
+Individual job: `python QCD_rpf.py -s <SETNAME> -y <YEAR> -v <VARIATION> -j <IJOB> -n <NJOBS>`
+
+Batch:
+
+```
+python condor/QCDrpf_args.py
+python CondorHelper.py -r condor/run_QCDrpf.sh -a condor/QCDrpf_args.sh -i "QCD_rpf.py"
+```
+
+## Additional Scripts
+
 
 
 
