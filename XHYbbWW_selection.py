@@ -6,6 +6,8 @@ from TIMBER.Tools.Common import CompileCpp, ExecuteCmd
 from collections import OrderedDict
 import TIMBER.Tools.AutoJME as AutoJME
 from XHYbbWW_class import XHYbbWW
+from modules.Btag_weight import BTagSF
+from modules.ApplyMETUncertainties import ApplyMETUncertainties
 
 ########## NO LONGER IN USE ##########
 
@@ -67,15 +69,18 @@ def fail_to_fail_comparison(self,variation,nodes):
 def XHYbbWW_selection(self,variation):
 
     ##### NEW VARIABLES FOR LATER USE #####
+    
+    #Neutrino eta
+    self.a.Define('Neutrino_eta','NeutrinoEta(Lepton_pt,Lepton_eta,Lepton_phi,Lepton_mass,MET_pt_XYshifted,MET_phi_XYshifted)')
 
     #Lorentz 4-vectors
-    self.a.Define('MET_vect','hardware::TLvector(MET_pt,0,MET_phi,0)') #neutrino mass negligable, for now assuming MET_eta = 0 (p_z = 0)
+    self.a.Define('MET_vect','hardware::TLvector(MET_pt_XYshifted,Neutrino_eta,MET_phi_XYshifted,0)') #neutrino mass negligable, for now assuming MET_eta = 0 (p_z = 0)
     self.a.Define('Wqq_vect','hardware::TLvector(Wqq_pt_corr,Wqq_eta,Wqq_phi,Wqq_msoftdrop_corr)') #use updated mass/pt after JME corrections
-    self.a.Define('Hbb_vect','hardware::TLvector(Higgs_pt_corr,Higgs_eta,Higgs_phi,Higgs_msoftdrop_corr)')
+    #self.a.Define('Higgs_vect','hardware::TLvector(Higgs_pt_corr,Higgs_eta,Higgs_phi,Higgs_msoftdrop_corr)')
 
     #Invariant masses of "Y"/"X"
     self.a.Define('mwlv','hardware::InvariantMass({Lepton_vect,MET_vect,Wqq_vect})')
-    self.a.Define('mhwlv','hardware::InvariantMass({Lepton_vect,MET_vect,Wqq_vect,Hbb_vect})')
+    self.a.Define('mhwlv','hardware::InvariantMass({Lepton_vect,MET_vect,Wqq_vect,Higgs_vect})')
 
     taggers = ['particleNetMD']
 
@@ -90,37 +95,27 @@ def XHYbbWW_selection(self,variation):
 
         start=self.a.GetActiveNode()
         
-        '''
-        self.a.Cut('Wtag','Wqq_particleNetMD_WqqvsQCD > {}'.format(self.cuts['JET']['particleNetMD_WqqvsQCD']))
-        self.nWtag = self.getNweighted()
-        self.AddCutflowColumn(self.nWtag,'nWtag')
-        '''
-        # Mark events with additional b-tagged AK4 jets 
-        self.a.Define('Jet_vect','hardware::TLvector(Jet_pt,Jet_eta,Jet_phi,Jet_mass)')
-        wp = self.cuts['JET']['btagDeepJet']['T'][self.year]
-        self.a.Define('ak4_exists','does_bjet_exist(Hbb_vect,Jet_vect,Jet_btagDeepFlavB,{})'.format(wp))
+        btag_wp = self.cuts['JET']['btagDeepJet']['T'][self.year]
+        self.a.Define('bjet_exists',f'does_bjet_exist(kinJet_btagDeepFlavB,{btag_wp})')
 
-        self.ApplyMassCuts()
+        self.ApplyWMass()
         post_mcut=self.a.GetActiveNode()
         
         #signal region
         SR=self.ApplySRorCR('SR',t)
-        SR_FP=self.ApplyPassFail('SR',t)
-       
-        #control region
-        self.a.SetActiveNode(post_mcut)
-        CR=self.ApplySRorCR('CR',t)
-        CR_FP=self.ApplyPassFail('CR',t)
-
+        SR_FP, SR_tag =self.ApplyPassFail('SR',t)
+      
         #ttbar-enriched control region
-        #self.a.SetActiveNode(post_mcut)
-        #ttCR=self.ApplySRorCR('ttCR',t)
-        #ttCR_FP=self.ApplyPassFail('ttCR',t)
+        self.a.SetActiveNode(post_mcut)
+        ttCR=self.ApplySRorCR('ttCR',t)
+        ttCR_FP, ttCR_tag = self.ApplyPassFail('ttCR',t)
+
+        SR_tag.Do('Write')
+        ttCR_tag.Do('Write')
 
         nodes=OrderedDict()
         nodes.update(SR_FP)
-        nodes.update(CR_FP)
-        #nodes.update(ttCR_FP)
+        nodes.update(ttCR_FP)
 
         binsX = [90,0,4500]
         binsY = [90,0,4500]      
@@ -132,7 +127,7 @@ def XHYbbWW_selection(self,variation):
             self.a.SetActiveNode(nodes[region])
             print('MX vs MY: Evaluating for {}'.format(region))
             plot_vars = ['mhwlv','mwlv']
-            templates = selection.a.MakeTemplateHistos(ROOT.TH2F('MXvMY_{}'.format(region), 'X vs Y Invariant Mass - {} {}'.format(region.split('_')[1],region.split('_')[0]), binsX[0],binsX[1],binsX[2],binsY[0],binsY[1],binsY[2]),plot_vars)
+            templates = self.a.MakeTemplateHistos(ROOT.TH2F('MXvMY_{}'.format(region), 'X vs Y Invariant Mass - {} {}'.format(region.split('_')[1],region.split('_')[0]), binsX[0],binsX[1],binsX[2],binsY[0],binsY[1],binsY[2]),plot_vars)
             templates.Do('Write')
     
     cutflowInfo = OrderedDict([
@@ -140,20 +135,17 @@ def XHYbbWW_selection(self,variation):
        ('nkinLep',self.nkinLep),
        ('nTrigs',self.nTrigs),
        ('nDijets',self.nDijets),
-       ('nHiggs',self.nHiggs),
        ('nWqq',self.nWqq),
-       #('ndPhiSR',self.ndPhiSR),
-       ('nIsoSR',self.nIsoSR),
+       ('nHtag_SR',self.nHtag_SR),
+       ('nAK4VetoSR',self.nAK4VetoSR),
+       ('nHiggs_SR',self.nHiggs_SR),
        ('nP_SR',self.nP_SR),
        ('nF_SR',self.nF_SR),
-       #('ndPhiCR',self.ndPhiCR),
-       ('nIsoCR',self.nIsoCR),
-       ('nP_CR',self.nP_CR),
-       ('nF_CR',self.nF_CR),
-       #('ndPhittCR',self.ndPhittCR),
-       #('nIsottCR',self.nIsottCR),
-       #('nP_ttCR',self.nP_ttCR),
-       #('nF_ttCR',self.nF_ttCR)
+       ('nHtag_ttCR',self.nHtag_ttCR),
+       ('nAK4AntiVetottR',self.nAK4AntiVetottCR),
+       ('nHiggs_ttCR',self.nHiggs_ttCR),
+       ('nP_ttCR',self.nP_ttCR),
+       ('nF_ttCR',self.nF_ttCR)
     ])
 
     nLabels = len(cutflowInfo)
@@ -202,27 +194,56 @@ if __name__ == '__main__':
     selection.nstart = selection.getNweighted()
     selection.AddCutflowColumn(selection.nstart,'nstart')
 
-    selection.ApplyJMECorrections(variation)
+    selection.ApplyJMECorrections(variation,jets=['FatJet','Jet'])
 
-    selection.KinematicLepton()
+    selection.KinematicLepton() #NOTE: I changed the isolation from <1 to < 0.1
 
+    '''
     # TRIGGER EFFICIENCIES
     if 'Data' not in setname: # we are dealing with MC
-        trigEff = Correction('TriggerEff','TIMBER/Framework/include/EffLoader.h',['plots/trigger2D/XHYbbWWtrigger2D_{}.root'.format(year if '16' not in year else '16all'),'Efficiency'], corrtype='weight')
+        trigEff = Correction('TriggerEff','TIMBER/Framework/include/EffLoader.h',['plots/trigger3D/XHYbbWWtrigger3D_{}.root'.format(year if '16' not in year else '16all'),'Efficiency'], corrtype='weight')
     else:
         trigEff = None
     selection.ApplyTrigs(trigEff) # Note: Lepton_abseta defined here
 
+    # Muon trigger efficiencies - apply separately for low and high pt muons
+    MuonSF(selection)
+    '''
+
+    selection.ApplyTrigs()
+
     selection.Dijets()
     selection.ApplyStandardCorrections(snapshot=False)
-    selection.ApplyTopPtReweight('Higgs','Wqq',scale = 1, isJet1AK4 = False)
+    selection.ApplyTopPtReweight('Higgs','Wqq',scale = 0.5, isJet1AK4 = False)
 
     Hbb_wp = selection.cuts['JET']['particleNetMD_HbbvsQCD'][1]
     Wqq_wp = selection.cuts['JET']['particleNetMD_WqqvsQCD']
 
-    selection.ApplyPNetReweight(Hbb_wp, Wqq_wp)
+    #selection.ApplyPNetReweight(Hbb_wp, Wqq_wp)
     selection.ApplyLeptonCorrections()
 
-    selection.a.MakeWeightCols(correctionNames=list(selection.a.GetCorrectionNames()),extraNominal='' if selection.a.isData else str(selection.GetXsecScale()))   
- 
+    # Apply b-tagging scale factors
+    selection.a.Define('Jet_vect','hardware::TLvector(Jet_pt_corr,Jet_eta,Jet_phi,Jet_mass)')
+    selection.a.Define('Higgs_vect','hardware::TLvector(Higgs_pt_corr,Higgs_eta,Higgs_phi,Higgs_msoftdrop_corr)') # Need this here
+    selection.a.Define('kinJet_status','KinJetIdxs(Jet_vect, Higgs_vect, Jet_jetId)') #returns vector of indices correponding to -1 (if jet fails kinematic cuts) or index in full full jet collection
+    selection.a.SubCollection('kinJet','Jet','kinJet_status != -1') # Sub-collection of jets to consider for b-tagging
+    if not selection.a.isData:
+        BTagSF(selection,'kinJet',wp='T',mujets_or_comb='comb') # run the function to create the variosu b-tagging corrections/uncertainties
+
+    # MET corrections
+    ApplyMETUncertainties(selection,variation)
+    selection.ApplyMETShiftXY()
+
+    print('CORRECTIONS:')
+    for correction in selection.a.GetCorrectionNames():
+        print(correction)
+
+    uncerts_to_corr = {
+        'Btag' : ['Btag_bc_correlated','Btag_bc_uncorrelated','Btag_light_correlated','Btag_light_uncorrelated'],
+        'MuonIDWeight' : ['MuonIDWeight_uncert_stat','MuonIDWeight_uncert_syst'],
+        'MuonRecoWeight' : ['MuonRecoWeight_uncert_stat','MuonRecoWeight_uncert_syst'],
+    }
+
+    selection.a.MakeWeightCols(correctionNames=list(selection.a.GetCorrectionNames()), uncerts_to_corr=uncerts_to_corr , extraNominal='' if selection.a.isData else str(selection.GetXsecScale()))   
+
     XHYbbWW_selection(selection,variation)

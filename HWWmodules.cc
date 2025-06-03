@@ -1,15 +1,22 @@
 #include "ROOT/RVec.hxx"
+#include "TRandom3.h"
 #include "TIMBER/Framework/include/common.h"
+#include <cstdlib>
 #include <stdio.h>
+#include <random>
 #include <cmath>
+#include <ctime>
+#include <complex>
+#include <vector>
 
-RVec<int> PickDijets(RVec<float> pt, RVec<float> eta, RVec<float> mass) {
-    // We are looking for a lead jet separated by a sublead jet by at least 90 degrees
+RVec<int> PickDijets(RVec<float> pt, RVec<float> eta, RVec<float> mass, RVec<float> jetId) {
+    // Pick two AK8 jets in the event to consider the Higgs and W candidates
+    // For each jet cut on pt, |eta|, phi, and require tight jet ID w/ lepton veto (standard quality cut)
     int jet0Idx = -1;
     int jet1Idx = -1;
-    // Since the vectors are ordered by pT, the first jet should roughly be our Higgs. 
     for (int ijet=0; ijet<eta.size(); ijet++) {
-        if (std::abs(eta[ijet]) < 2.4 && mass[ijet] > 50 && pt[ijet] > 300) {
+	// Search for leading jet
+        if (std::abs(eta[ijet]) < 2.4 && mass[ijet] > 50 && pt[ijet] > 300 && jetId[ijet] > 4) {
             // we've found our lead jet, break loop
             jet0Idx = ijet;
             break;
@@ -21,7 +28,7 @@ RVec<int> PickDijets(RVec<float> pt, RVec<float> eta, RVec<float> mass) {
     }
     // now loop over the remaining jets,
     for (int ijet=jet0Idx+1; ijet<eta.size(); ijet++) {
-        if (std::abs(eta[ijet]) < 2.4 && mass[ijet] > 50 && pt[ijet] > 300) { //&& std::abs(eta[ijet] - eta[jet0Idx]) < 1.3) { //experimental delta eta cut
+        if (std::abs(eta[ijet]) < 2.4 && mass[ijet] > 50 && pt[ijet] > 300 && jetId[ijet] > 4) {
             jet1Idx = ijet;
             break;
         }
@@ -34,43 +41,76 @@ RVec<int> PickDijets(RVec<float> pt, RVec<float> eta, RVec<float> mass) {
     }
 }
 
-int PickJetB(RVec<ROOT::Math::PtEtaPhiMVector> Jet_vect, ROOT::Math::PtEtaPhiMVector Lepton_vect, RVec<int> jetID, RVec<float> btag, float wp) {
+RVec<int> PickPNetBJet(RVec<ROOT::Math::PtEtaPhiMVector> Jet_vect, ROOT::Math::PtEtaPhiMVector Lepton_vect, RVec<int> jetId, RVec<int> puId, RVec<float> btag, float wp, bool snapshot) {
+    // For constructing a control region used to calibrate PNet tagger, not used in main analysis
     // Pick index of highest pt b-tagged ak4 jet with deltaR (jet,lepton) < 2
-    int Jet_idx = -1;
-    for (int i=0; i<Jet_vect.size(); i++) {
-        if (Jet_vect[i].Pt() > 25 && std::abs(Jet_vect[i].Eta()) < 2.4 && btag[i] > wp && jetID[i] == 6 && abs(hardware::DeltaPhi(Jet_vect[i].Phi(),Lepton_vect.Phi())) < 2) {
-            Jet_idx = i;
-	    break;
-	}
-    }
-    return Jet_idx;
-}
-
-int PickAK8(RVec<ROOT::Math::PtEtaPhiMVector> FatJet_vect, ROOT::Math::PtEtaPhiMVector BJet_vect, ROOT::Math::PtEtaPhiMVector Lepton_vect) {
-    int Jet_idx = -1;
-    for (int idx=0; idx<FatJet_vect.size(); idx++) {
-        if (FatJet_vect[idx].Pt() > 300 && std::abs(FatJet_vect[idx].Eta()) < 2.4 && abs(hardware::DeltaPhi(FatJet_vect[idx].Phi(),Lepton_vect.Phi())) > 2 && hardware::DeltaR(FatJet_vect[idx],BJet_vect) > 0.8) {
-            Jet_idx = idx;
-            break;
+    std::size_t NJ = jetId.size();
+    std::vector<int> Jet_idx;
+    for (int i=0; i<NJ; i++) {
+        if (Jet_vect[i].Pt() > 10 && std::abs(Jet_vect[i].Eta()) < 2.4 && jetId[i] > 4 && btag[i] > wp) {
+            if (snapshot) {
+                Jet_idx.push_back(i);
+            }
+            else {
+	        if (Jet_vect[i].Pt() < 50 && puId[i] == 0) { // Reject jets which fail the loose pileup ID
+		    continue;
+		}
+                if (Jet_vect[i].Pt() > 30 && abs(hardware::DeltaPhi(Jet_vect[i].Phi(),Lepton_vect.Phi())) < 2 && abs(hardware::DeltaPhi(Jet_vect[i].Phi(),Lepton_vect.Phi())) > 0.1) {
+                    Jet_idx.push_back(i);
+                }
+            }
         }
     }
     return Jet_idx;
 }
 
-bool does_bjet_exist(ROOT::Math::PtEtaPhiMVector Hbb_vec, RVec<ROOT::Math::PtEtaPhiMVector> ak4_vec, RVec<float> ak4_btag, float wp) {
-    // Identify b-tagged AK4 jets which are outside the radius of the AK8 Higgs jets
-    std::size_t NJ = ak4_vec.size();
-    bool ak4 = false;
-    for (int i=0; i<NJ; i++) {
-	if (ak4_btag[i] > wp && hardware::DeltaR(ak4_vec[i], Hbb_vec) > 1.2) {  
-	    ak4 = true;
+RVec<int> PickPNetAK8(RVec<ROOT::Math::PtEtaPhiMVector> FatJet_vect, RVec<float> FatJet_jetId, ROOT::Math::PtEtaPhiMVector BJet_vect, ROOT::Math::PtEtaPhiMVector Lepton_vect, bool snapshot) {
+    // For constructing a control region used to calibrate PNet tagger, not used in main analysis
+    // Identify probe AK8 jet to calibrate
+    std::size_t NJ = FatJet_vect.size();
+    std::vector<int> Jet_idx;
+    for (int idx=0; idx<NJ; idx++) {
+        if (FatJet_vect[idx].Pt() > 250 && std::abs(FatJet_vect[idx].Eta()) < 2.4) {
+	    if (snapshot) {	
+                Jet_idx.push_back(idx);
+	    }
+	    else {
+	        if (FatJet_vect[idx].Pt() > 300 && FatJet_jetId[idx] > 4 && abs(hardware::DeltaPhi(FatJet_vect[idx].Phi(),Lepton_vect.Phi())) > 2 && hardware::DeltaR(FatJet_vect[idx],BJet_vect) > 0.8) {
+		    Jet_idx.push_back(idx);
+		}
+	    }
+        }
+    }
+    return Jet_idx;
+}
+
+RVec<int> KinJetIdxs(RVec<ROOT::Math::PtEtaPhiMVector> Jet_vect, ROOT::Math::PtEtaPhiMVector Hbb_vect, RVec<int> JetID) {
+    // Extract indices of AK4 jets passing the minimum kinematic requirements
+    // Return indices corresponding to the set of jets which will be used for b-tagging corrections
+    std::vector<int> kinIdxs;
+    for (int i=0; i<Jet_vect.size(); i++) {
+        if (Jet_vect[i].Pt() > 25 && std::abs(Jet_vect[i].Eta()) < 2.4 && JetID[i] > 4 && abs(hardware::DeltaR(Jet_vect[i],Hbb_vect)) > 1.2) {
+            kinIdxs.push_back(i);  
+	}
+    }
+    return kinIdxs;
+}
+
+bool does_bjet_exist(RVec<float> ak4_btag, float wp) {
+    // Identify if a b-tagged AK4 jet exists from some jet collection 
+    bool btag = false;
+    for (float val : ak4_btag) {
+	if (val > wp) {  
+	    btag = true;
 	    break;
 	}
     }
-    return ak4;
+    return btag;
 }
 
 bool isLeptonPreselected(int nElectron, RVec<float> elePt, RVec<float> eleEta, RVec<float> eleIso, int nMuon, RVec<float> muPt, RVec<float> muEta, RVec<float> muIso){
+    // Perform lepton pre-selection
+    // Search for an electron or muon passing basic kinematic requirements
     if (nElectron < 1 && nMuon < 1) {return false;}
     bool isLepPre = false;
     for (int idx=0; idx<elePt.size(); idx++){
@@ -89,6 +129,7 @@ bool isLeptonPreselected(int nElectron, RVec<float> elePt, RVec<float> eleEta, R
 }
 
 bool isJetPreselected(int nFatJet, RVec<float> FatJet_pt, RVec<float> FatJet_eta, RVec<float> FatJet_mass) {
+    // Perform jet pre-selection, search for a jet passing basic kinematic requirements
     bool isJetPre = false;
     // perform standard jet pre-selection
     if (nFatJet < 2) {return isJetPre;}
@@ -110,11 +151,12 @@ bool isJetPreselected(int nFatJet, RVec<float> FatJet_pt, RVec<float> FatJet_eta
     return isJetPre;
 }
 
-int kinElectron(RVec<float> pt, RVec<float> eta, RVec<float> iso){
+int kinElectron(RVec<float> pt, RVec<float> eta, RVec<float> iso, RVec<float> dxy, RVec<float> dz, RVec<float> sip3d){
     // Select highest pt signal-like electron
+    // Return index of electron, or -1 if no such electron exists
     int eleIdx = -1;
     for (int idx=0; idx<pt.size(); idx++) {
-        if (pt[idx] > 25 && std::abs(eta[idx]) < 2.5) { //  && iso[idx] < 0.1) {
+        if (pt[idx] > 35 && std::abs(eta[idx]) < 2.5 && iso[idx] < 0.1 && std::abs(dxy[idx]) < 0.05 && std::abs(dz[idx]) < 0.1 && std::abs(sip3d[idx]) < 4) {
             eleIdx = idx;
             break;
         }
@@ -122,11 +164,12 @@ int kinElectron(RVec<float> pt, RVec<float> eta, RVec<float> iso){
     return eleIdx;
 }
 
-int kinMuon(RVec<float> pt, RVec<float> eta, RVec<float> iso){
+int kinMuon(RVec<float> pt, RVec<float> eta, RVec<float> iso, RVec<float> dxy, RVec<float> dz, RVec<float> sip3d){
     // Select highest pt signal-like muon
+    // Return index of electron, or -1 if no such electron exists
     int muIdx = -1;
     for (int idx=0; idx<pt.size(); idx++) {
-        if (pt[idx] > 25 && std::abs(eta[idx]) < 2.4) { // && iso[idx] < 0.1) {
+        if (pt[idx] > 35 && std::abs(eta[idx]) < 2.4 && iso[idx] < 0.1 && std::abs(dxy[idx]) < 0.05 && std::abs(dz[idx]) < 0.1 && std::abs(sip3d[idx]) < 4) {
             muIdx = idx;
             break;
         }
@@ -135,6 +178,7 @@ int kinMuon(RVec<float> pt, RVec<float> eta, RVec<float> iso){
 }
 
 int kinLepton(RVec<float> pt, RVec<float> eta){
+    // Deprecated
     // Select highest pt signal-like lepton
     int Idx = -1;
     for (int idx=0; idx<pt.size(); idx++) {
@@ -146,11 +190,12 @@ int kinLepton(RVec<float> pt, RVec<float> eta){
     return Idx;
 }
 
-int PNetLepton(RVec<float> pt, RVec<float> eta, RVec<float> iso){
+int PNetLepton(RVec<float> pt, RVec<float> eta, RVec<float> iso, RVec<float> dxy, RVec<float> dz, RVec<float> sip3d){
+    // For constructing a control region used to calibrate PNet tagger, not used in main analysis
     // Select highest pt signal-like lepton
     int Idx = -1;
     for (int idx=0; idx<pt.size(); idx++) {
-        if (pt[idx] > 30 && std::abs(eta[idx]) < 2.4 && iso[idx] < 0.1) {
+        if (pt[idx] > 35 && std::abs(eta[idx]) < 2.4 && iso[idx] < 0.1 && std::abs(dxy[idx]) < 0.05 && std::abs(dz[idx]) < 0.1 && std::abs(sip3d[idx]) < 4) {
             Idx = idx;
             break;
         }
@@ -160,7 +205,7 @@ int PNetLepton(RVec<float> pt, RVec<float> eta, RVec<float> iso){
 
 int leptonType_studies(RVec<float> electron_pt, RVec<float> muon_pt) {
     // Find out if highest lepton in event is election or muon (return 0 if election, 1 if muon)
-    // Used in XHYbbWW_studies.py
+    // Used in XHYbbWW_studies.py (may be deprecated now)
     if (electron_pt.size() == 0) {
         return 1;
     }
@@ -176,7 +221,7 @@ int leptonType_studies(RVec<float> electron_pt, RVec<float> muon_pt) {
 }
 
 int LeptonIdx(int electronIdx, int muonIdx, RVec<float> electron_pt, RVec<float> muon_pt) {
-    // Decide whether an event is a lepton or muon type
+    // Decide whether the primary lepton in the event is an electron or muon
     // Pick highest pt lepton amongst previously selected signal-like electrons and muons
     int lepIdx = -1;
     if (electronIdx == -1) {
@@ -224,7 +269,7 @@ float DeltaR(float eta1, float phi1, float eta2, float phi2) {
 }
 
 int JetFlavor_ttbar(float Jet_eta, float Jet_phi, RVec<float> Gen_eta, RVec<float> Gen_phi, RVec<int> pdgId, RVec<int> motherIdx) {
-    // EXPERIMENTAL: Assigns true flavor to ttbar MC AK8 jets based on gen particles inside the jet cone (R=0.8):
+    // Assigns true flavor to ttbar MC AK8 jets based on gen particles inside the jet cone (R=0.8):
     // To be used on a single jet (not an RVec collection)
     // Output: a number corresponding to jet flavor
     // 0: merged top jet
@@ -240,9 +285,16 @@ int JetFlavor_ttbar(float Jet_eta, float Jet_phi, RVec<float> Gen_eta, RVec<floa
         if (std::abs(genId) == 5 && std::abs(mother_genId) == 6) {b.push_back(igen);}
         else if (std::abs(genId) < 6 && std::abs(genId) > 0 && std::abs(mother_genId) == 24) {
             // make sure mother of W is not just another W
-            int greatgrandmother_genId = pdgId[motherIdx[motherIdx[motherIdx[igen]]]];
             if (std::abs(grandmother_genId) == 6) {q.push_back(igen);}
-            else if (std::abs(grandmother_genId) == 24 && std::abs(greatgrandmother_genId) == 6) {q.push_back(igen);}
+            else if (std::abs(grandmother_genId) == 24) {
+                int ancestor_genId = 24;
+		int ancestor_idx = motherIdx[motherIdx[igen]];
+	        while (ancestor_genId == 24) { 
+		    ancestor_idx = motherIdx[ancestor_idx];
+		    ancestor_genId = std::abs(pdgId[ancestor_idx]);
+		}    
+	        if (ancestor_genId == 6) {q.push_back(igen);}
+	    }
         }
     }
     int jetId = 3; // assume unmerged jet
@@ -266,7 +318,7 @@ int JetFlavor_ttbar(float Jet_eta, float Jet_phi, RVec<float> Gen_eta, RVec<floa
 }
 
 RVec<int> JetFlavor_ttbar_vec(RVec<float> Jet_eta, RVec<float> Jet_phi, RVec<float> Gen_eta, RVec<float> Gen_phi, RVec<int> pdgId, RVec<int> motherIdx) {
-    // EXPERIMENTAL: Assigns true flavor to ttbar MC AK8 jets based on gen particles inside the jet cone (R=0.8):
+    // Assigns true flavor to ttbar MC AK8 jets based on gen particles inside the jet cone (R=0.8):
     // To be used on an RVec collection of jets (like FatJet)
     // Output: a number corresponding to jet flavor
     // 0: merged top jet
@@ -282,9 +334,10 @@ RVec<int> JetFlavor_ttbar_vec(RVec<float> Jet_eta, RVec<float> Jet_phi, RVec<flo
         if (std::abs(genId) == 5 && std::abs(mother_genId) == 6) {b.push_back(igen);} 
         else if (std::abs(genId) < 6 && std::abs(genId) > 0 && std::abs(mother_genId) == 24) {
             // make sure mother of W is not just another W
-            int greatgrandmother_genId = pdgId[motherIdx[motherIdx[motherIdx[igen]]]];
-            if (std::abs(grandmother_genId) == 6) {q.push_back(igen);}
-            else if (std::abs(grandmother_genId) == 24 && std::abs(greatgrandmother_genId) == 6) {q.push_back(igen);}           
+	    q.push_back(igen);
+            //int greatgrandmother_genId = pdgId[motherIdx[motherIdx[motherIdx[igen]]]];
+            //if (std::abs(grandmother_genId) == 6) {q.push_back(igen);}
+            //else if (std::abs(grandmother_genId) == 24 && std::abs(greatgrandmother_genId) == 6) {q.push_back(igen);}           
         }
     }
     RVec<int> jetId(Jet_eta.size());
@@ -387,20 +440,20 @@ RVec<bool> is_b_in_AK4(RVec<int> GenPart_pdgId, RVec<ROOT::Math::PtEtaPhiMVector
     return is_b;
 }
 
-RVec<int> does_AK4_have_b(RVec<int> GenPart_pdgId, RVec<ROOT::Math::PtEtaPhiMVector> GenPart_vect, RVec<ROOT::Math::PtEtaPhiMVector> AK4_vect, RVec<float> AK4_btag, float wp) {
-    // Identifies which gen particles are b quarks inside one constituent of an input jet collection, and returns the matching jets
-    std::size_t nJet = AK4_btag.size();
+RVec<int> does_AK4_have_b(RVec<int> GenPart_pdgId, RVec<int> GenPart_motherIdx, RVec<ROOT::Math::PtEtaPhiMVector> GenPart_vect, RVec<ROOT::Math::PtEtaPhiMVector> AK4_vect, ROOT::Math::PtEtaPhiMVector Hbb_vect) {
+    std::size_t nJet = AK4_vect.size();
     RVec<int> is_bjet(nJet);
     for (int j=0; j<nJet; j++) {
 	int bjet = -1;
-	if (AK4_btag[j] > wp) {
+	if (hardware::DeltaR(Hbb_vect,AK4_vect[j]) > 1.2) {
             for (int i=0; i<GenPart_pdgId.size(); i++) {
-                if (std::abs(GenPart_pdgId[i]) == 5 && hardware::DeltaR(GenPart_vect[i],AK4_vect[j]) < 0.8) {
+		int Mother_pdgId = GenPart_pdgId[GenPart_motherIdx[i]];
+                if (std::abs(GenPart_pdgId[i]) == 5 && std::abs(Mother_pdgId) == 6 && hardware::DeltaR(GenPart_vect[i],AK4_vect[j]) < 0.8) {
                     bjet = j;
                     break;
                 }
             }
-	}
+    	}
         is_bjet[j] = bjet;
     }
     return is_bjet;
@@ -416,3 +469,170 @@ RVec<int> PickBfromT(RVec<int> pdgId, RVec<int> mother_idx) {
     }
     return b_idxs;
 }
+
+std::random_device rd; // random number to provide seed for MT algorithm
+std::mt19937 generator(rd()); // RNG using the Mersenne Twister method
+std::uniform_real_distribution<double> dis(0.0,1.0); // Uniform distribution from which to sample random numbers
+
+float NeutrinoEta_rand(float Lepton_pt, float Lepton_eta, float Lepton_phi, float Lepton_mass, float MET_pt, float MET_phi) {
+    // Calculate the neutrino eta based on MET and a prior knowledge of the W mass
+    float W_mass = 80.3692; // GeV, global average repored by Particle Data Group (2024)
+        	
+    float Lepton_px = Lepton_pt*cos(Lepton_phi);
+    float Lepton_py = Lepton_pt*sin(Lepton_phi);
+    float Lepton_pz = Lepton_pt*sinh(Lepton_eta);
+    float Lepton_p = Lepton_pt*cosh(Lepton_eta);
+    float Lepton_E = sqrt(Lepton_p*Lepton_p + Lepton_mass*Lepton_mass);
+
+    float MET_px = MET_pt*cos(MET_phi);
+    float MET_py = MET_pt*sin(MET_phi);
+
+    float A = (W_mass*W_mass - Lepton_mass*Lepton_mass)/2 + (Lepton_px*MET_px + Lepton_py*MET_py);
+    float B = Lepton_E*Lepton_E - Lepton_pz*Lepton_pz;
+
+    // solutions of the form eta = u +/- v (w/ v potentially imaginary)
+    std::complex<float> Neutrino_pz_u = A*Lepton_pz/B;
+    std::complex<float> Neutrino_pz_v = Lepton_E/B*sqrt(A*A + MET_pt*MET_pt*(Lepton_pz*Lepton_pz-Lepton_E*Lepton_E));
+
+    float Neutrino_pz;
+    if (Neutrino_pz_v.imag() == 0) {
+        // solution is fully real, generate a random number to determine whether to take the + or - solution
+	double random = dis(generator);
+	if (random > 0.5) {
+	    Neutrino_pz = Neutrino_pz_u.real() + Neutrino_pz_v.real();
+	}
+	else {
+	    Neutrino_pz = Neutrino_pz_u.real() - Neutrino_pz_v.real();
+	}
+    }
+    else { 
+        // solution is complex, take the real part
+	Neutrino_pz = Neutrino_pz_u.real();
+    }
+
+    // now calculate neutrino eta
+    float Neutrino_eta = asinh(Neutrino_pz/MET_pt);
+    return Neutrino_eta;
+}
+
+float NeutrinoEta(float Lepton_pt, float Lepton_eta, float Lepton_phi, float Lepton_mass, float MET_pt, float MET_phi) {
+    // Calculate the neutrino eta based on MET and a prior knowledge of the W mass
+    float W_mass = 80.3692; // GeV, global average repored by Particle Data Group (2024)
+
+    float Lepton_px = Lepton_pt*cos(Lepton_phi);
+    float Lepton_py = Lepton_pt*sin(Lepton_phi);
+    float Lepton_pz = Lepton_pt*sinh(Lepton_eta);
+    float Lepton_p = Lepton_pt*cosh(Lepton_eta);
+    float Lepton_E = sqrt(Lepton_p*Lepton_p + Lepton_mass*Lepton_mass);
+
+    float MET_px = MET_pt*cos(MET_phi);
+    float MET_py = MET_pt*sin(MET_phi);
+
+    float A = (W_mass*W_mass - Lepton_mass*Lepton_mass)/2 + (Lepton_px*MET_px + Lepton_py*MET_py);
+    float B = Lepton_E*Lepton_E - Lepton_pz*Lepton_pz;
+
+    // solutions of the form eta = u +/- v (w/ v potentially imaginary)
+    std::complex<float> Neutrino_pz_u = A*Lepton_pz/B;
+    std::complex<float> Neutrino_pz_v = Lepton_E/B*sqrt(A*A + MET_pt*MET_pt*(Lepton_pz*Lepton_pz-Lepton_E*Lepton_E));
+
+    float Neutrino_pz;
+    if (Neutrino_pz_v.imag() == 0) {
+        // solution is fully real, take lower |p_z| solution
+        if (std::abs(Neutrino_pz_u.real() + Neutrino_pz_v.real()) > std::abs(Neutrino_pz_u.real() - Neutrino_pz_v.real())) {
+            Neutrino_pz = Neutrino_pz_u.real() - Neutrino_pz_v.real();
+        }   
+        else {
+            Neutrino_pz = Neutrino_pz_u.real() + Neutrino_pz_v.real();
+        } 
+    }
+    else {
+        // solution is complex, take the real part
+        Neutrino_pz = Neutrino_pz_u.real();
+    }
+
+    // now calculate neutrino eta
+    float Neutrino_eta = asinh(Neutrino_pz/MET_pt);
+    return Neutrino_eta;
+}
+
+float ReconstructPt(ROOT::Math::PtEtaPhiMVector obj1_vec, ROOT::Math::PtEtaPhiMVector obj2_vec) {
+    // Return the net pT of two objects backed on their 4-vectors (pt, eta, phi, mass)
+    float px1 = obj1_vec.Pt()*cos(obj1_vec.Phi());
+    float py1 = obj1_vec.Pt()*sin(obj1_vec.Phi());
+    float px2 = obj2_vec.Pt()*cos(obj2_vec.Phi());
+    float py2 = obj2_vec.Pt()*sin(obj2_vec.Phi());
+
+    float px = px1+px2;
+    float py = py1+py2;
+    float pt = sqrt(px*px + py*py);
+    return pt;
+}
+
+RVec<float> invert_vector(RVec<float> vect) {
+    // Invert each entry in a vector
+    std::size_t v_size = vect.size();
+    RVec<float> vect_inverted(v_size);
+    for (int i=0; i<v_size; i++) {
+        vect_inverted[i] = 1 / vect[i];
+    }
+    return vect_inverted;
+}
+
+bool check_muon_trigger_status(int type, int pt, RVec<bool> trigs_lowPt, RVec<bool> trigs_highPt) {
+    // Check if an event passes the appropriate muon triggers
+    // If event if of electron type, return true (i.e., don't apply the triggers)
+    // If event is of muon type, check if passing the low or high pT trigger set (depending on the muon pT)
+    if (type == 0) {
+        return true; // electron event
+    }
+    else {
+        if (pt < 55) {
+	    for (bool trig : trigs_lowPt) {
+                if (trig) {
+		    return true;
+		}
+	    }
+	}
+	else {
+	    for (bool trig : trigs_highPt) {
+	        if (trig) {
+		    return true;
+		}
+            }
+	}
+    }
+    return false;
+}
+
+int pick_Higgs_from_dijets(RVec<float> dijet_hbb, RVec<float> dijet_wqq, RVec<float> dijet_phi, float lepton_phi) {
+    // Return index of Higgs jet, based on the previously selected dijet collection
+    // If one jet has a lower Higgs tag score and higher W tag score (or vice versa), assign the jets to be the Higgs/W candidate in accordance
+    // If one jet has a higher score for both the Higgs/W discriminant, assign the Higgs to be the jet further in phi from the lepton
+    // Expect dijet variables to be RVec with size 2
+    int HiggsIdx;
+    if (dijet_hbb[0] > dijet_hbb[1] && dijet_wqq[0] < dijet_wqq[1]) {
+        HiggsIdx = 0;
+    }
+    else if (dijet_hbb[0] < dijet_hbb[1] && dijet_wqq[0] > dijet_wqq[1]) {
+        HiggsIdx = 1;
+    }
+    else {
+        if (abs(hardware::DeltaPhi(dijet_phi[0],lepton_phi)) > abs(hardware::DeltaPhi(dijet_phi[1],lepton_phi))) {
+	    HiggsIdx = 0;
+	}
+	else {
+	    HiggsIdx = 1;
+	}
+    }
+    return HiggsIdx;
+}
+
+RVec<float> zeros_like(RVec<float> vect) {
+    // Basically numpy zeros_like
+    std::size_t v_length = vect.size();
+    std::vector<float> ones(v_length,0);
+    return ones;
+}
+
+
+
