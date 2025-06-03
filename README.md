@@ -111,7 +111,8 @@ The set of triggers used in the analysis is listed for each primary dataset belo
 | ---- | --------------- |
 | 2018 | `HLT_Ele32_WPTight_Gsf` `HLT_Ele115_CaloIdVT_GsfTrkIdT` `HLT_Photon200` |
 
----- DEPRECATED ----
+--------------------
+<ins>DEPRECATED</ins>
 
 Efficiencies are measured for the full suite of triggers in the JetHT dataset, separately for each year. The efficiency, in this case, is the ratio of events which pass most of the event selection (along with several JetHT reference triggers) and the above target triggers vs all events which pass the selection/reference triggers. It was discovered that, during run 2017B, certain triggers were not available. Therefore, including run 2017B into the total 2017 dataset causes the efficiency of the entire year to drop. Therefore, the efficiency is measured separately for 2017B, but this run is dropped from the total 2017 dataset when measuring the efficiency for the whole year. 
 
@@ -130,7 +131,7 @@ Trigger efficiency measurments and scale factors are now taken from central meas
 
 ## 5) Run selection + make template histograms
 
-The step performs the remaining selection used in the analysis and produces the template histograms used for the background estimate with 2DAlphabet. Histograms are binned in $m_X$ vs $m_Y$. For each systematic uncertainty considered in the analysis, histograms of the form `syst__nom`, `syst__up`, and `syst__down` are produced, corresponding to the nominal, up ($+1\sigma$), and down($-1\sigma$) variations of that systematic. Such plots are produced in two orthogonal regions of the data: the "signal region", where we expect to observe the signal, and a $t\bar{t}$-enriched measurment region used to calibrate the $t\bar{t}$ Monte Carlo (dubbed the "$t\bar{t}$-MR"). For each region we also construct two sub-regions where the W candidate passes or fails the ParticleNet $W\to qq$ discriminant working point (used for the QCD estimate). These regions are defined by the following criteria. Note that $D_{Hbb}$/$D_{Wqq}$ refer to the $H\to bb$ and $W\to qq$ discriminants, respectively.
+The step performs the remaining selection used in the analysis and produces the template histograms used for the background estimate with 2DAlphabet. Histograms are binned in $m_X$ vs $m_Y$. For each systematic uncertainty considered in the analysis, histograms of the form `syst__nom`, `syst__up`, and `syst__down` are produced, corresponding to the nominal, up ($+1\sigma$), and down($-1\sigma$) variations of that systematic. Such plots are produced in two orthogonal regions of the data: the "signal region", where we expect to observe the signal, and a $t\bar{t}$-enriched measurment region used to calibrate the $t\bar{t}$ Monte Carlo (dubbed the "$t\bar{t}$-MR"). For each region we also construct two sub-regions where the W candidate passes or fails the ParticleNet $W\to qq$ discriminant working point (used for the QCD estimate). These regions are defined by the following criteria. Note that $D_{\text{Hbb}}$ and $D_{\text{Wqq}}$ refer to the Higgs and W tagging discriminants, respectively.
 
 ![App Screenshot](images/selections.png)
 
