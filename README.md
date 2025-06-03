@@ -1,6 +1,6 @@
 # XHYbbWW semileptonic
 
-Adapted from [XHYbbWW](https://github.com/ammitra/XHYbbWW) (Amitav Mitra).
+Initially adapted from [XHYbbWW](https://github.com/ammitra/XHYbbWW) (Amitav Mitra).
 
 Description: Semileptonic $X \to HY \to bbWW$ analysis, with $W^+W^- \to \ell \nu q\bar{q}$. Analysis is performed predominantly using [TIMBER](https://lucascorcodilos.com/TIMBER/index.html), and the background (QCD) estimate + calibration of Monte Carlo samples is done with [2DAlphabet](https://lucascorcodilos.com/2DAlphabet/) (see [XHYbbWW_BackgroundEstimate](https://github.com/michaelhesford/XHYbbWW_BackgroundEstimate) for this work).
 
@@ -111,6 +111,8 @@ The set of triggers used in the analysis is listed for each primary dataset belo
 | ---- | --------------- |
 | 2018 | `HLT_Ele32_WPTight_Gsf` `HLT_Ele115_CaloIdVT_GsfTrkIdT` `HLT_Photon200` |
 
+---- DEPRECATED ----
+
 Efficiencies are measured for the full suite of triggers in the JetHT dataset, separately for each year. The efficiency, in this case, is the ratio of events which pass most of the event selection (along with several JetHT reference triggers) and the above target triggers vs all events which pass the selection/reference triggers. It was discovered that, during run 2017B, certain triggers were not available. Therefore, including run 2017B into the total 2017 dataset causes the efficiency of the entire year to drop. Therefore, the efficiency is measured separately for 2017B, but this run is dropped from the total 2017 dataset when measuring the efficiency for the whole year. 
 
 Run `XHYbbWW_trigger1D.py` to generate plots of trigger efficiencies as functions of the lepton $p_T$ and $|\eta|$. The script `XHYbbWW_trigger2D.py` performs the same task but produces 2D efficiency histograms which can be fed to TIMBER's `EffLoader` module later on.
@@ -122,17 +124,17 @@ Batch:
 python condor/trigger_args.py
 python CondorHelper.py -r condor/run_trigger2D.sh -a condor/trigger_args.txt -i "XHYbbWW_trigger2D.py XHYbbWW_class.py XHYbbWW_config.json"
 ```
+--------------------
+
+Trigger efficiency measurments and scale factors are now taken from central measurements made by the Muon POG for muon triggers (see [here](https://twiki.cern.ch/twiki/bin/view/CMS/MuonPOG#User_Recommendations)) and from results reported in [this analysis note](https://cms.cern.ch/iCMS/jsp/db_notes/noteInfo.jsp?cmsnoteid=CMS%20AN-2022/124) for electron triggers. Application of the efficiencies/scale factors to Monte Carlo is handled inside `XHYbbWW_selection.py`.
 
 ## 5) Run selection + make template histograms
 
-The step performs the remaining selection used in the analysis and produces the template histograms used for the background estimate with 2DAlphabet. Histograms are binned in $m_X$ vs $m_Y$. For each systematic uncertainty considered in the analysis, histograms of the form `syst__nom`, `syst__up`, and `syst__down` are produced, corresponding to the nominal, up ($+1\sigma$), and down($-1\sigma$) variations of that systematic. Such plots are produced in four orthogonal regions of the data, as defined by the jet tagging scores below:
+The step performs the remaining selection used in the analysis and produces the template histograms used for the background estimate with 2DAlphabet. Histograms are binned in $m_X$ vs $m_Y$. For each systematic uncertainty considered in the analysis, histograms of the form `syst__nom`, `syst__up`, and `syst__down` are produced, corresponding to the nominal, up ($+1\sigma$), and down($-1\sigma$) variations of that systematic. Such plots are produced in two orthogonal regions of the data: the "signal region", where we expect to observe the signal, and a $t\bar{t}$-enriched measurment region used to calibrate the $t\bar{t}$ Monte Carlo (dubbed the "$t\bar{t}$-MR"). For each region we also construct two sub-regions where the W candidate passes or fails the ParticleNet $W\to qq$ discriminant working point (used for the QCD estimate). These regions are defined by the following criteria. Note that $D_{Hbb}$/$D_{Wqq}$ refer to the $H\to bb$ and $W\to qq$ discriminants, respectively.
 
-**Signal region:** Hbb > 0.98
-**Control region:** Hbb < 0.98
-**Pass subregion:** Wqq > 0.8
-**Fail subregion:** Wqq < 0.8
+![App Screenshot](images/selections.png)
 
-Individual job: `python XHYbbWW_selectionHF.py -s <SETNAME> -y <YEAR> -j <IJOB> -n <NJOBS>
+Individual job: `python XHYbbWW_selection.py -s <SETNAME> -y <YEAR> -j <IJOB> -n <NJOBS>
 
 Batch:
 
