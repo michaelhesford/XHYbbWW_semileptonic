@@ -159,9 +159,16 @@ python CondorHelper.py -r condor/run_QCDrpf.sh -a condor/QCDrpf_args.sh -i "QCD_
 
 ## Additional Scripts
 
-`PlotDistributions.py`: Create nice plots showing the data/MC agreement for a variety of interesting distributions. Run: `python condor/distribution_args.py` then `python CondorHelper.py -r condor/run_distributions.sh -a condor/distribution_args.txt -i "PlotDistributions.py"`. Grab the jobs using `plots/get_all.py` and then make the histograms with `python make_control_plots.py`.
-`scripts/missing_snapshot_args.py`: Check for any missing snapshot jobs, output is a `.txt` file in the `condor/` directory
-`scripts/check_ttrees.py`: Check for any snapshot jobs for which a ttree was not saved, output is a `.txt` file in the `condor/` directory
+1) `PlotDistributions.py`: Create nice plots showing the data/MC agreement for a variety of interesting distributions. Run: 
+```
+python condor/distribution_args.py
+python CondorHelper.py -r condor/run_distributions.sh -a condor/distribution_args.txt -i "PlotDistributions.py"
+```
+Grab the jobs using `plots/get_all.py` and then make the histograms with `python make_control_plots.py`.
+
+2) `scripts/missing_snapshot_args.py`: Check for any missing snapshot jobs, output is a `.txt` file in the `condor/` directory
+
+3) `scripts/check_ttrees.py`: Check for any snapshot jobs for which a ttree was not saved, output is a `.txt` file in the `condor/` directory
 
 
 
