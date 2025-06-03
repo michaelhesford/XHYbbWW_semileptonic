@@ -1,6 +1,7 @@
 import ROOT, time
 ROOT.gROOT.SetBatch(True)
 from argparse import ArgumentParser
+from collections import OrderedDict
 from TIMBER.Tools.Common import CompileCpp
 from XHYbbWW_class import XHYbbWW
 
@@ -27,9 +28,33 @@ ijob=args.ijob
 njobs=args.njobs
 
 filename='raw_nano/{}_{}.txt'.format(setname,year)
-selection = XHYbbWW(filename,ijob,njobs)
+selection = XHYbbWW(filename,ijob,njobs,use_xrd_global=True)
 selection.BasicKinematics()
-out=selection.a.MakeWeightCols(extraNominal='' if selection.a.isData else 'genWeight*%s'%selection.GetXsecScale()) #renormalize events
+out=selection.ApplyStandardCorrections(snapshot=True,do_ak4JEC=True)
+'''
+#create cut flow table
+outFile = ROOT.TFile.Open('{}_{}_{}_SnapCutFlow.root'.format(setname,year,ijob),'RECREATE')
+outFile.cd()
+
+cutflowInfo = OrderedDict([
+    ('start',selection.NSTART),
+    ('flags',selection.NFLAGS),
+    ('lep. pre-sel.',selection.LEPPRE),
+    ('jet pre-sel',selection.JETPRE),
+    ('MET>25',selection.METPT)	
+])
+
+nLabels = len(cutflowInfo)
+hCutflow = ROOT.TH1F('cutflow', 'Number of events after each cut', nLabels, 0.5, nLabels+0.5)
+nBin = 1
+for label, value in cutflowInfo.items():
+    hCutflow.GetXaxis().SetBinLabel(nBin, label)
+    hCutflow.AddBinContent(nBin, value)
+    nBin += 1
+hCutflow.Write()
+outFile.Close()
+'''
+
 selection.Snapshot(out)
 
 print('%s sec'%(time.time()-start))

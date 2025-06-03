@@ -90,25 +90,44 @@ def MakeEfficiency(year,ijob,njobs):
     pt_bins = [25,50,75,100,125,150,175,200,225,250,275,300,325,350,400,500,1000]  #[25,50,75,100,150,300,600,1000]
     eta_bins = [0,0.3,0.6,0.9,1.2,1.5,1.8,2.5]  #[0,0.9,1.2,2.1,2.5]
 
-    hists.Add('lepPtDenominator',selection.a.DataFrame.Histo1D(('lepPtDenominator','',len(pt_bins)-1, array('d',pt_bins)),'Lepton_pt'))
-    hists.Add('lepEtaDenominator',selection.a.DataFrame.Histo1D(('lepEtaDenominator','',len(eta_bins)-1, array('d',eta_bins)),'Lepton_abseta'))
-    selection.a.Cut('trigger',selection.a.GetTriggerString(trigs))
-    hists.Add('lepPtNumerator',selection.a.DataFrame.Histo1D(('lepPtNumerator','', len(pt_bins)-1, array('d',pt_bins)),'Lepton_pt'))
-    hists.Add('lepEtaNumerator',selection.a.DataFrame.Histo1D(('lepEtaNumerator','', len(eta_bins)-1, array('d',eta_bins)),'Lepton_abseta'))
+    all_lep = selection.a.GetActiveNode() # measure efficiency separately for electron/muon events
+    eleEvents=selection.a.Cut('eleEvents','LeptonType == 0')
+
+    hists.Add('lepPtDenominator_ele',selection.a.DataFrame.Histo1D(('lepPtDenominator_ele','',len(pt_bins)-1, array('d',pt_bins)),'Lepton_pt'))
+    hists.Add('lepEtaDenominator_ele',selection.a.DataFrame.Histo1D(('lepEtaDenominator_ele','',len(eta_bins)-1, array('d',eta_bins)),'Lepton_abseta'))
+    selection.a.Cut('trigger_ele',selection.a.GetTriggerString(trigs))
+    hists.Add('lepPtNumerator_ele',selection.a.DataFrame.Histo1D(('lepPtNumerator_ele','', len(pt_bins)-1, array('d',pt_bins)),'Lepton_pt'))
+    hists.Add('lepEtaNumerator_ele',selection.a.DataFrame.Histo1D(('lepEtaNumerator_ele','', len(eta_bins)-1, array('d',eta_bins)),'Lepton_abseta'))
+
+    selection.a.SetActiveNode(all_lep)
+    muEvents = selection.a.Cut('muEvents','LeptonType == 1')
+
+    hists.Add('lepPtDenominator_mu',selection.a.DataFrame.Histo1D(('lepPtDenominator_mu','',len(pt_bins)-1, array('d',pt_bins)),'Lepton_pt'))
+    hists.Add('lepEtaDenominator_mu',selection.a.DataFrame.Histo1D(('lepEtaDenominator_mu','',len(eta_bins)-1, array('d',eta_bins)),'Lepton_abseta'))
+    selection.a.Cut('trigger_mu',selection.a.GetTriggerString(trigs))
+    hists.Add('lepPtNumerator_mu',selection.a.DataFrame.Histo1D(('lepPtNumerator_mu','', len(pt_bins)-1, array('d',pt_bins)),'Lepton_pt'))
+    hists.Add('lepEtaNumerator_mu',selection.a.DataFrame.Histo1D(('lepEtaNumerator_mu','', len(eta_bins)-1, array('d',eta_bins)),'Lepton_abseta'))
 
     effs = {
-        "lepPtEfficiency": ROOT.TEfficiency(hists['lepPtNumerator'], hists['lepPtDenominator']),
-        "lepEtaEfficiency": ROOT.TEfficiency(hists['lepEtaNumerator'], hists['lepEtaDenominator'])
+        "lepPtEfficiency_ele": ROOT.TEfficiency(hists['lepPtNumerator_ele'], hists['lepPtDenominator_ele']),
+        "lepEtaEfficiency_ele": ROOT.TEfficiency(hists['lepEtaNumerator_ele'], hists['lepEtaDenominator_ele']),
+        "lepPtEfficiency_mu": ROOT.TEfficiency(hists['lepPtNumerator_mu'], hists['lepPtDenominator_mu']),
+        "lepEtaEfficiency_mu": ROOT.TEfficiency(hists['lepEtaNumerator_mu'], hists['lepEtaDenominator_mu'])
     }
 
     out = ROOT.TFile.Open('XHYbbWWtrigger1D_{}.root'.format(year),'RECREATE')
     #out = ROOT.TFile.Open('XHYbbWWtrigger1D_{}_{}_{}.root'.format(year,ijob,njobs),'RECREATE')
     out.cd()
 
-    hists['lepPtDenominator'].Write()
-    hists['lepPtNumerator'].Write()
-    hists['lepEtaDenominator'].Write()
-    hists['lepEtaNumerator'].Write()
+    hists['lepPtDenominator_ele'].Write()
+    hists['lepPtNumerator_ele'].Write()
+    hists['lepEtaDenominator_ele'].Write()
+    hists['lepEtaNumerator_ele'].Write()
+
+    hists['lepPtDenominator_mu'].Write()
+    hists['lepPtNumerator_mu'].Write()
+    hists['lepEtaDenominator_mu'].Write()
+    hists['lepEtaNumerator_mu'].Write()
 
     for name, eff in effs.items():
         eff.SetName(name)
@@ -121,7 +140,7 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('-y', type=str, dest='year',
                         action='store', required=False,
-                        help='Year of set (16, 17, 17B, 18).')
+                        help='Year of set (16, 17, 18).')
     parser.add_argument('-j', type=int, dest='ijob',required=False,
                         action='store', default=1, help='current job')
     parser.add_argument('-n', type=int, dest='njobs',required=False,
@@ -136,8 +155,8 @@ if __name__ == '__main__':
 
     else:
         files = {
-            '17noB': ROOT.TFile.Open('plots/trigger1D/XHYbbWWtrigger1D_17noB.root'),
-            '17B': ROOT.TFile.Open('plots/trigger1D/XHYbbWWtrigger1D_17B.root'),
+            #'17noB': ROOT.TFile.Open('plots/trigger1D/XHYbbWWtrigger1D_17noB.root'),
+            #'17B': ROOT.TFile.Open('plots/trigger1D/XHYbbWWtrigger1D_17B.root'),
             '18': ROOT.TFile.Open('plots/trigger1D/XHYbbWWtrigger1D_18.root')
         }
 
@@ -145,17 +164,22 @@ if __name__ == '__main__':
         ExecuteCmd('hadd -f plots/trigger1D/XHYbbWWtrigger1D_16all.root plots/trigger1D/XHYbbWWtrigger1D_16.root plots/trigger1D/XHYbbWWtrigger1D_16APV.root')
         files['16'] = ROOT.TFile.Open('plots/trigger1D/XHYbbWWtrigger1D_16all.root')
 
+        #Do the same for 2017
+        ExecuteCmd('hadd -f plots/trigger1D/XHYbbWWtrigger1D_17.root plots/trigger1D/XHYbbWWtrigger1D_17B.root plots/trigger1D/XHYbbWWtrigger1D_17noB.root')
+        files['17'] = ROOT.TFile.Open('plots/trigger1D/XHYbbWWtrigger1D_17.root')
+
         #Make nicely formatted histograms
-        effs = {effname.GetName():[files[y].Get(effname.GetName()) for y in ['16','17noB','17B','18']] for effname in files['16'].GetListOfKeys()}
+        effs = {effname.GetName():[files[y].Get(effname.GetName()) for y in ['16','17','18']] for effname in files['16'].GetListOfKeys()}
         colors = [ROOT.kBlack, ROOT.kRed, ROOT.kOrange-3, ROOT.kGreen+1]
-        legendNames = ['2016','2017 (C,D,E,F)','2017 (B)','2018']
+        legendNames = ['2016','2017','2018']
         for effname in effs.keys():
-            c = ROOT.TCanvas('c','c',2000,1500)
-            c.Divide(2,2)
+            c = ROOT.TCanvas('c','c',2000,500)
+            c.Divide(3,1)
+            obj = 'Electron' if 'ele' in effname else 'Muon'
             if 'Pt' in effname:
-                varname = 'Lepton p_{T} (GeV)'
+                varname = f'{obj} p_{{T}} (GeV)'
             elif 'Eta' in effname:
-                varname = 'Lepton |#eta|'
+                varname = f'{obj} |#eta|'
             for i,h in enumerate(effs[effname]):
                 c.cd(i+1)
                 if 'Efficiency' in effname:
